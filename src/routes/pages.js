@@ -10,12 +10,6 @@ const { pagina, escapeHtml } = require('../views');
 
 const router = express.Router();
 
-// Total de etapas do funil (telas 1-11) para calcular o progresso.
-const TOTAL_ETAPAS = 11;
-function progresso(etapa) {
-  return { pct: (etapa / TOTAL_ETAPAS) * 100, label: `Etapa ${etapa} de ${TOTAL_ETAPAS}` };
-}
-
 // Botao primario (laranja) que leva a proxima tela.
 function botao(href, texto, variante = 'primario') {
   return `<a class="vm-btn vm-btn--${variante}" href="${href}">${escapeHtml(texto)}</a>`;
@@ -79,19 +73,35 @@ router.get('/vaga/:slug', (req, res) => {
     .join('');
 
   const conteudo = `
-    <section class="vm-hero">
+    <article class="vm-vaga">
       <p class="vm-kicker">Vaga aberta · Perfil ${escapeHtml(vaga.perfil)}</p>
       <h1 class="vm-title">${escapeHtml(vaga.titulo)}</h1>
-      ${vaga.faixa_pagamento ? `<p class="vm-pay">${escapeHtml(vaga.faixa_pagamento)}</p>` : ''}
-      ${vaga.descricao ? `<p class="vm-lead">${escapeHtml(vaga.descricao)}</p>` : ''}
-      ${chips ? `<div class="vm-chips" aria-label="Skills exigidas">${chips}</div>` : ''}
       ${
-        vaga.sobre_empresa
-          ? `<div class="vm-card"><h2 class="vm-h2">Sobre a empresa</h2><p>${escapeHtml(vaga.sobre_empresa)}</p></div>`
+        vaga.faixa_pagamento
+          ? `<p class="vm-pay-chip">${escapeHtml(vaga.faixa_pagamento)}</p>`
           : ''
       }
-      ${botao(`/aplicar/${vaga.slug}`, 'Aplicar agora')}
-    </section>`;
+      ${vaga.descricao ? `<p class="vm-lead">${escapeHtml(vaga.descricao)}</p>` : ''}
+      ${
+        chips
+          ? `<section class="vm-secao">
+              <h2 class="vm-h2">Competências exigidas</h2>
+              <div class="vm-chips">${chips}</div>
+            </section>`
+          : ''
+      }
+      ${
+        vaga.sobre_empresa
+          ? `<section class="vm-secao">
+              <h2 class="vm-h2">Sobre a empresa</h2>
+              <div class="vm-card"><p>${escapeHtml(vaga.sobre_empresa)}</p></div>
+            </section>`
+          : ''
+      }
+    </article>
+    <div class="vm-cta-fixa">
+      ${botao(`/aplicar/${vaga.slug}`, 'Aplicar')}
+    </div>`;
 
   res.send(pagina({ titulo: vaga.titulo, tema: 'claro', conteudo }));
 });
@@ -104,7 +114,7 @@ router.get('/aplicar/:slug', (req, res) => {
     pagina({
       titulo,
       tema: 'claro',
-      progresso: progresso(2),
+      etapa: 1,
       conteudo: placeholder({
         kicker: vaga ? `Vaga: ${vaga.titulo}` : 'Aplicacao',
         titulo: 'Aplicacao em 2 passos',
@@ -122,7 +132,7 @@ router.get('/preparacao', (req, res) => {
     pagina({
       titulo: 'Preparacao para a entrevista',
       tema: 'claro',
-      progresso: progresso(3),
+      etapa: 2,
       conteudo: placeholder({
         kicker: 'Antes de comecar',
         titulo: 'Preparacao para a entrevista',
@@ -140,7 +150,7 @@ router.get('/identificacao', (req, res) => {
     pagina({
       titulo: 'Identificacao',
       tema: 'claro',
-      progresso: { pct: 33, label: 'Etapa 1 de 3' },
+      etapa: 1,
       conteudo: placeholder({
         kicker: 'Retomar aplicacao',
         titulo: 'Informe seus dados',
@@ -158,7 +168,7 @@ router.get('/instrucoes', (req, res) => {
     pagina({
       titulo: 'Instrucoes da entrevista',
       tema: 'escuro',
-      progresso: progresso(5),
+      etapa: 2,
       conteudo: placeholder({
         kicker: 'Regras',
         titulo: 'Instrucoes da entrevista',
@@ -176,7 +186,7 @@ router.get('/permissao-camera', (req, res) => {
     pagina({
       titulo: 'Permissao de camera',
       tema: 'escuro',
-      progresso: progresso(6),
+      etapa: 3,
       conteudo: placeholder({
         kicker: 'Camera (opcional)',
         titulo: 'Permissao de camera',
@@ -194,7 +204,7 @@ router.get('/teste-camera', (req, res) => {
     pagina({
       titulo: 'Teste de camera',
       tema: 'escuro',
-      progresso: progresso(7),
+      etapa: 3,
       conteudo: placeholder({
         kicker: 'Camera',
         titulo: 'Teste de camera',
@@ -211,7 +221,7 @@ router.get('/permissao-microfone', (req, res) => {
     pagina({
       titulo: 'Permissao de microfone',
       tema: 'escuro',
-      progresso: progresso(8),
+      etapa: 3,
       conteudo: placeholder({
         kicker: 'Microfone',
         titulo: 'Permissao de microfone',
@@ -228,7 +238,7 @@ router.get('/teste-microfone', (req, res) => {
     pagina({
       titulo: 'Teste de microfone',
       tema: 'escuro',
-      progresso: progresso(9),
+      etapa: 3,
       conteudo: placeholder({
         kicker: 'Microfone',
         titulo: 'Teste de microfone',
@@ -247,7 +257,7 @@ router.get('/entrevista', (req, res) => {
       titulo: 'Entrevista',
       tema: 'escuro',
       comOrbe: true,
-      progresso: progresso(10),
+      etapa: 4,
       conteudo: placeholder({
         kicker: 'Agente Vera',
         titulo: 'Area de entrevista',
@@ -266,7 +276,7 @@ router.get('/finalizacao', (req, res) => {
       titulo: 'Entrevista concluida',
       tema: 'escuro',
       comOrbe: true,
-      progresso: progresso(11),
+      etapa: 4,
       conteudo: placeholder({
         kicker: 'Tudo certo',
         titulo: 'Entrevista concluida',

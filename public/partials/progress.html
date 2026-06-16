@@ -1,11 +1,9 @@
-<!-- Barra de progresso do funil (componente reutilizavel).
-     A largura do preenchimento vem da variavel inline --vm-progress (0-100%),
-     definida pelo servidor conforme a etapa atual. -->
-<div class="vm-progress" role="progressbar" aria-label="Progresso no funil"
-     aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{PROGRESSO_PCT}}"
-     style="--vm-progress: {{PROGRESSO_PCT}}%;">
-  <div class="vm-progress__track">
-    <div class="vm-progress__fill"></div>
-  </div>
-  <span class="vm-progress__label">{{PROGRESSO_LABEL}}</span>
-</div>
+<!-- Barra de progresso segmentada do funil (componente reutilizavel).
+     4 etapas Vendedor Mestre: 1 Aplicacao - 2 Preparacao - 3 Verificacao - 4 Entrevista.
+     Trilha cinza-clara; segmentos concluidos/atual em Laranja Fogo.
+     O conteudo de {{SEGMENTOS}} e gerado pelo servidor (views.js) conforme a etapa atual. -->
+<nav class="vm-funil" aria-label="Progresso da candidatura">
+  <ol class="vm-funil__lista">
+    {{SEGMENTOS}}
+  </ol>
+</nav>

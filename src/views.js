@@ -36,17 +36,28 @@ function preencher(template, dados) {
   );
 }
 
-// Renderiza a barra de progresso para uma etapa do funil.
-function barraProgresso({ pct = 0, label = '' }) {
-  return preencher(PARCIAIS.progress, {
-    PROGRESSO_PCT: Math.max(0, Math.min(100, Math.round(pct))),
-    PROGRESSO_LABEL: escapeHtml(label),
-  });
+// As 4 macro-etapas do funil (nao usamos o "1/3" do micro1).
+const ETAPAS_FUNIL = ['Aplicacao', 'Preparacao', 'Verificacao', 'Entrevista'];
+
+// Renderiza a barra de progresso segmentada para a etapa atual (1..4).
+function barraFunil(etapaAtual) {
+  const segmentos = ETAPAS_FUNIL.map((nome, i) => {
+    const numero = i + 1;
+    let estado = 'futura';
+    if (numero < etapaAtual) estado = 'concluida';
+    else if (numero === etapaAtual) estado = 'atual';
+    const aria = numero === etapaAtual ? ' aria-current="step"' : '';
+    return `<li class="vm-funil__etapa vm-funil__etapa--${estado}"${aria}>
+        <span class="vm-funil__barra"></span>
+        <span class="vm-funil__rotulo"><b>${numero}</b> ${escapeHtml(nome)}</span>
+      </li>`;
+  }).join('');
+  return preencher(PARCIAIS.progress, { SEGMENTOS: segmentos });
 }
 
 // Layout completo de uma pagina.
-//   opcoes: { titulo, conteudo, tema: 'claro'|'escuro', progresso?:{pct,label}, comOrbe?:bool }
-function pagina({ titulo, conteudo, tema = 'claro', progresso = null, comOrbe = false }) {
+//   opcoes: { titulo, conteudo, tema: 'claro'|'escuro', etapa?:1..4, comOrbe?:bool }
+function pagina({ titulo, conteudo, tema = 'claro', etapa = null, comOrbe = false }) {
   const classeTema = tema === 'escuro' ? 'tema-escuro' : 'tema-claro';
   const tituloPagina = titulo ? `${titulo} · Vendedor Mestre` : 'Vendedor Mestre';
 
@@ -67,7 +78,7 @@ function pagina({ titulo, conteudo, tema = 'claro', progresso = null, comOrbe = 
 </head>
 <body>
   ${PARCIAIS.header}
-  ${progresso ? barraProgresso(progresso) : ''}
+  ${etapa ? barraFunil(etapa) : ''}
   <main class="vm-main">
     <div class="vm-container">
       ${comOrbe ? PARCIAIS.orb : ''}

@@ -143,28 +143,68 @@ html.tema-escuro .vm-btn--secundario{ color:var(--vm-white); }
 html.tema-claro .vm-card{ background:var(--vm-white); }
 html.tema-escuro .vm-card{ background:color-mix(in srgb, var(--vm-white) 5%, transparent); }
 
-/* ── Barra de progresso do funil ── */
-.vm-progress{
-  display:flex; align-items:center; gap:.75rem;
-  padding:.75rem 1.25rem;
-  max-width:720px; width:100%; margin:0 auto;
+/* ── Barra de progresso segmentada do funil (4 etapas) ── */
+.vm-funil{ padding:.85rem 1.25rem; max-width:720px; width:100%; margin:0 auto; }
+.vm-funil__lista{
+  list-style:none; display:flex; gap:.5rem;
 }
-.vm-progress__track{
-  flex:1; height:6px; border-radius:999px;
-  background:color-mix(in srgb, var(--vm-gray-mid) 40%, transparent);
-  overflow:hidden;
+.vm-funil__etapa{ flex:1; display:flex; flex-direction:column; gap:.35rem; min-width:0; }
+.vm-funil__barra{
+  height:6px; border-radius:999px;
+  /* trilha cinza-clara */
+  background:color-mix(in srgb, var(--vm-gray-mid) 45%, transparent);
 }
-.vm-progress__fill{
-  height:100%;
-  width:var(--vm-progress, 0%);
-  background:var(--vm-orange);
-  transition:width .3s ease;
-}
-.vm-progress__label{
-  font-family:var(--font-mono);
-  font-size:.75rem;
+.vm-funil__rotulo{
+  font-family:var(--font-display);
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  font-size:.72rem;
   color:var(--vm-gray-mid);
-  white-space:nowrap;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.vm-funil__rotulo b{ font-weight:900; }
+/* Etapas concluidas e atual: preenchimento laranja */
+.vm-funil__etapa--concluida .vm-funil__barra,
+.vm-funil__etapa--atual .vm-funil__barra{ background:var(--vm-orange); }
+.vm-funil__etapa--atual .vm-funil__rotulo{ color:var(--vm-orange); }
+html.tema-claro .vm-funil__etapa--concluida .vm-funil__rotulo{ color:var(--vm-black); }
+html.tema-escuro .vm-funil__etapa--concluida .vm-funil__rotulo{ color:var(--vm-white); }
+/* No mobile estreito, esconde rotulos e mantem so as barras */
+@media (max-width:480px){
+  .vm-funil__rotulo{ font-size:.6rem; }
+}
+
+/* ── Tela de Vaga ── */
+.vm-vaga{ display:flex; flex-direction:column; gap:1.1rem; align-items:flex-start; }
+.vm-secao{ display:flex; flex-direction:column; gap:.6rem; width:100%; }
+/* Faixa de pagamento como pill de destaque (preto solido + texto branco) */
+.vm-pay-chip{
+  display:inline-block;
+  font-family:var(--font-mono);
+  font-size:.95rem;
+  padding:.4rem .9rem;
+  border-radius:999px;
+  background:var(--vm-black);
+  color:var(--vm-white);
+  border:1px solid var(--vm-orange);
+}
+
+/* CTA fixo no rodape (mobile); estatico no desktop */
+.vm-cta-fixa{ width:100%; margin-top:.5rem; }
+.vm-cta-fixa .vm-btn{ width:100%; }
+@media (max-width:767px){
+  .vm-cta-fixa{
+    position:fixed; left:0; right:0; bottom:0; z-index:10;
+    padding:.85rem 1.25rem calc(.85rem + env(safe-area-inset-bottom));
+    margin:0;
+    background:var(--vm-offwhite);
+    border-top:1px solid color-mix(in srgb, var(--vm-gray-mid) 35%, transparent);
+  }
+  /* respiro para o conteudo nao ficar escondido atras do CTA fixo */
+  html.tema-claro .vm-container:has(.vm-cta-fixa){ padding-bottom:6rem; }
+}
+@media (min-width:768px){
+  .vm-cta-fixa .vm-btn{ width:auto; }
 }
 
 /* ── Orbe do agente Vera (laranja sobre preto) ── */

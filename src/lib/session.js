@@ -1,47 +1,64 @@
 'use strict';
 
-// Esqueleto de sessao + token (acesso retomavel do candidato).
-// Fase 0: apenas utilitarios. O fluxo real (criar aplicacao -> token -> retomar
-// pela tela de identificacao) e ligado na Fase 1.
+// Sessao + token de acesso retomavel do candidato.
 //
-// Decisoes:
-// - Token: string opaca e aleatoria, guardada em applications.token. Vai no link
-//   enviado por e-mail e tambem num cookie de sessao do candidato.
-// - Sem dependencia extra: usamos crypto nativo. Se a sessao crescer, avaliamos
-//   express-session na Fase 1 (mantendo uma unica instancia / store em SQLite).
+// Como funciona:
+// - Ao criar uma application (Fase 1B), geramos um token opaco e aleatorio,
+//   guardado em applications.token. Esse token vai num cookie httpOnly ASSINADO
+//   "vm_token" (assinatura via cookie-parser + SESSION_SECRET).
+// - Em cada requisicao, loadCandidato(req) le o token do cookie, valida contra o
+//   banco (camada de dados agnostica) e devolve a application — ou null.
+//
+// Nenhum dado sensivel fica no cookie: so o token. A validacao real e no banco.
 
 const crypto = require('node:crypto');
+const { config } = require('../config');
+const db = require('../db');
 
 const COOKIE_TOKEN = 'vm_token';
+const MAX_IDADE_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
-// Gera um token de aplicacao retomavel (url-safe).
+// Gera um token de application retomavel (url-safe).
 function gerarToken(bytes = 24) {
   return crypto.randomBytes(bytes).toString('base64url');
 }
 
-// Le o token da sessao do candidato (cookie). Retorna null se ausente.
-function tokenDaRequisicao(req) {
-  const cookie = req.headers?.cookie || '';
-  const par = cookie.split(';').map((c) => c.trim()).find((c) => c.startsWith(`${COOKIE_TOKEN}=`));
-  if (!par) return null;
-  return decodeURIComponent(par.slice(COOKIE_TOKEN.length + 1)) || null;
+// Grava o cookie assinado com o token. Requer cookie-parser(SESSION_SECRET) no app.
+function setToken(res, token) {
+  res.cookie(COOKIE_TOKEN, token, {
+    httpOnly: true,
+    signed: true,
+    sameSite: 'lax',
+    secure: config.ehProducao, // HTTPS em producao (EasyPanel com SSL)
+    maxAge: MAX_IDADE_MS,
+    path: '/',
+  });
 }
 
-// Define o cookie de sessao do candidato com o token.
-function definirCookieToken(res, token) {
-  const partes = [
-    `${COOKIE_TOKEN}=${encodeURIComponent(token)}`,
-    'Path=/',
-    'HttpOnly',
-    'SameSite=Lax',
-    `Max-Age=${60 * 60 * 24 * 7}`, // 7 dias
-  ];
-  res.setHeader('Set-Cookie', partes.join('; '));
+// Le o token do cookie assinado. Retorna null se ausente ou assinatura invalida.
+function getToken(req) {
+  const token = req.signedCookies && req.signedCookies[COOKIE_TOKEN];
+  return token || null;
+}
+
+// Remove o cookie de sessao (logout / token invalido).
+function limparToken(res) {
+  res.clearCookie(COOKIE_TOKEN, { path: '/' });
+}
+
+// Valida o token contra o banco e retorna a application ou null.
+function loadCandidato(req) {
+  const token = getToken(req);
+  if (!token) return null;
+  const aplicacao = db.obterAplicacaoPorToken(token);
+  return aplicacao || null;
 }
 
 module.exports = {
   COOKIE_TOKEN,
   gerarToken,
-  tokenDaRequisicao,
-  definirCookieToken,
+  setToken,
+  getToken,
+  limparToken,
+  loadCandidato,
 };
