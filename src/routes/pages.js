@@ -16,6 +16,20 @@ function botao(href, texto, variante = 'primario') {
   return `<a class="vm-btn vm-btn--${variante}" href="${href}">${escapeHtml(texto)}</a>`;
 }
 
+// Middleware de gate de sessao: protege etapas que exigem candidato identificado.
+// Continuidade sem reescrever dados: com vm_token valido, a Identificacao NUNCA
+// aparece; ela so surge para quem volta depois (sem cookie).
+function exigirCandidato(req, res, next) {
+  const candidato = session.loadCandidato(req);
+  if (candidato) {
+    req.candidato = candidato; // anexa para as rotas reusarem
+    return next();
+  }
+  // Guarda o destino pretendido para retomar depois da identificacao.
+  const retomar = encodeURIComponent(req.originalUrl);
+  return res.redirect(`/identificacao?retomar=${retomar}`);
+}
+
 // Bloco de placeholder padrao para as telas ainda nao implementadas.
 function placeholder({ kicker, titulo, descricao, acao }) {
   return `
@@ -260,7 +274,7 @@ router.get('/aplicar/:slug', (req, res) => {
 
 // Resolve a vaga + roteiro do candidato (pela sessao) ou da vaga ativa.
 function vagaERoteiroDaSessao(req) {
-  const candidato = session.loadCandidato(req);
+  const candidato = req.candidato || session.loadCandidato(req);
   const vaga = candidato ? db.obterVaga(candidato.job_id) : db.obterVagaAtiva();
   const roteiro = vaga && vaga.roteiro_id ? db.obterRoteiro(vaga.roteiro_id) : null;
   return { candidato, vaga, roteiro };
@@ -279,9 +293,8 @@ function estimarDuracao(roteiro) {
   return { min, max };
 }
 
-// ── Tela 3: Preparacao ──
-router.get('/preparacao', (req, res) => {
-  // Sessao validada via lib/session (o gate de redirecionamento fica na Fase 1D).
+// ── Tela 3: Preparacao (protegida) ──
+router.get('/preparacao', exigirCandidato, (req, res) => {
   const { candidato, vaga, roteiro } = vagaERoteiroDaSessao(req);
   const tituloVaga = vaga ? vaga.titulo : 'em aberto';
   const { min, max } = estimarDuracao(roteiro);
@@ -336,26 +349,33 @@ router.get('/preparacao', (req, res) => {
   );
 });
 
-// ── Tela 4: Identificacao (fallback) ──
+// ── Tela 4: Identificacao (fallback — so para quem volta sem sessao) ──
 router.get('/identificacao', (req, res) => {
-  res.send(
-    pagina({
-      titulo: 'Identificacao',
-      tema: 'claro',
-      etapa: 1,
-      conteudo: placeholder({
-        kicker: 'Retomar aplicacao',
-        titulo: 'Informe seus dados',
-        descricao:
-          'Aparece apenas quando voce volta depois (sem sessao ativa). Recupera sua aplicacao por e-mail e telefone.',
-        acao: botao('/preparacao', 'Continuar'),
-      }),
-    }),
-  );
+  const retomar = typeof req.query.retomar === 'string' ? req.query.retomar : '';
+  const conteudo = `
+    <form id="form-identificacao" class="vm-form" novalidate>
+      <input type="hidden" name="retomar" value="${escapeHtml(retomar)}">
+      <h1 class="vm-title">Informe seus dados</h1>
+      <p class="vm-lead">Use o e-mail da sua candidatura e o código de acesso que enviamos para você.</p>
+
+      <p class="vm-form-erro" data-erro hidden role="alert"></p>
+
+      <label class="vm-campo">E-mail
+        <input type="email" name="email" autocomplete="email" required>
+      </label>
+
+      <label class="vm-campo">Código de acesso
+        <input type="text" name="codigo" autocomplete="one-time-code" placeholder="Código enviado por e-mail" required>
+      </label>
+
+      <button type="submit" class="vm-btn vm-btn--primario" data-enviar>Continuar</button>
+    </form>`;
+
+  res.send(pagina({ titulo: 'Identificação', tema: 'claro', etapa: 1, conteudo }));
 });
 
-// ── Tela 5: Instrucoes ──
-router.get('/instrucoes', (req, res) => {
+// ── Tela 5: Instrucoes (protegida) ──
+router.get('/instrucoes', exigirCandidato, (req, res) => {
   const regras = [
     'A entrevista é gravada em áudio e pode ser compartilhada com a equipe de recrutamento.',
     'Fique num ambiente silencioso. Use o botão "toque para falar" para gravar cada resposta.',

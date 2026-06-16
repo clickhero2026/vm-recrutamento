@@ -178,3 +178,45 @@
     btn.textContent = 'Candidatar-me';
   });
 })();
+
+// ── Tela de Identificacao ──
+(function () {
+  const form = document.getElementById('form-identificacao');
+  if (!form) return;
+  const areaErro = form.querySelector('[data-erro]');
+
+  function mostrarErro(msg) {
+    areaErro.textContent = msg;
+    areaErro.hidden = !msg;
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = form.querySelector('[name="email"]').value.trim();
+    const codigo = form.querySelector('[name="codigo"]').value.trim();
+    if (!email || !codigo) {
+      mostrarErro('Informe e-mail e código de acesso.');
+      return;
+    }
+    const btn = form.querySelector('[data-enviar]');
+    btn.disabled = true;
+    btn.textContent = 'Verificando...';
+    try {
+      const resp = await fetch('/api/identificacao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, codigo }),
+      });
+      const dados = await resp.json();
+      if (resp.ok && dados.ok) {
+        window.location = dados.redirect || '/preparacao';
+        return;
+      }
+      mostrarErro(dados.erro || 'Não encontramos uma candidatura com esses dados.');
+    } catch (err) {
+      mostrarErro('Falha de conexão. Verifique sua internet e tente novamente.');
+    }
+    btn.disabled = false;
+    btn.textContent = 'Continuar';
+  });
+})();

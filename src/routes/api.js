@@ -159,8 +159,35 @@ router.post('/aplicacao', (req, res) => {
   });
 });
 
-// Recupera aplicacao por email + codigo (tela de Identificacao)
-router.post('/identificacao', naoImplementado('Fase 1C'));
+// ── POST /api/identificacao ──
+// Recupera a application por email + codigo (token). Restaura a sessao.
+//
+// TODO (Fase 4): o codigo/link de acesso sera enviado ao candidato por e-mail
+// (Resend). Por enquanto, o codigo e o token logado em dev pelo POST /api/aplicacao.
+// IMPORTANTE: nunca autenticar so por e-mail — exigimos email E token corretos
+// para evitar acesso indevido a candidaturas de terceiros.
+router.post('/identificacao', (req, res) => {
+  const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+  const codigo = String((req.body && req.body.codigo) || '').trim();
+
+  if (!email || !codigo) {
+    return res.status(400).json({ ok: false, erro: 'Informe e-mail e código de acesso.' });
+  }
+
+  // Busca pela camada de dados (por token) e confere o e-mail como segundo fator.
+  const aplicacao = db.obterAplicacaoPorToken(codigo);
+  const emailConfere =
+    aplicacao && String(aplicacao.email || '').trim().toLowerCase() === email;
+
+  if (!aplicacao || !emailConfere) {
+    return res
+      .status(400)
+      .json({ ok: false, erro: 'Não encontramos uma candidatura com esses dados.' });
+  }
+
+  session.setToken(res, aplicacao.token);
+  return res.json({ ok: true, redirect: '/preparacao' });
+});
 
 // Inicia entrevista, retorna 1a pergunta (texto + audio)
 router.post('/interview/start', naoImplementado('Fase 3'));
