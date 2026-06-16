@@ -6,6 +6,7 @@
 
 const express = require('express');
 const db = require('../db');
+const session = require('../lib/session');
 const { pagina, escapeHtml } = require('../views');
 
 const router = express.Router();
@@ -106,38 +107,175 @@ router.get('/vaga/:slug', (req, res) => {
   res.send(pagina({ titulo: vaga.titulo, tema: 'claro', conteudo }));
 });
 
-// ── Tela 2: Aplicacao ──
+// ── Tela 2: Aplicacao (2 passos em um unico template, troca via JS) ──
+function stepper(nome, valor, min, max, sufixo = '') {
+  return `
+    <div class="vm-stepper" data-stepper>
+      <button type="button" class="vm-stepper__btn" data-acao="menos" aria-label="Diminuir">−</button>
+      <input class="vm-stepper__input" type="number" name="${nome}" value="${valor}"
+             min="${min}" max="${max}" inputmode="numeric" readonly>
+      ${sufixo ? `<span class="vm-stepper__sufixo">${escapeHtml(sufixo)}</span>` : ''}
+      <button type="button" class="vm-stepper__btn" data-acao="mais" aria-label="Aumentar">+</button>
+    </div>`;
+}
+
+function formularioAplicacao(vaga) {
+  const opcoesDdi = [
+    ['+55', 'Brasil +55'],
+    ['+1', 'EUA/Canadá +1'],
+    ['+351', 'Portugal +351'],
+    ['+44', 'Reino Unido +44'],
+    ['+34', 'Espanha +34'],
+  ]
+    .map(
+      ([v, rotulo], i) =>
+        `<option value="${v}"${i === 0 ? ' selected' : ''}>${escapeHtml(rotulo)}</option>`,
+    )
+    .join('');
+
+  const segmentos = ['B2B', 'B2C', 'Ambos']
+    .map(
+      (s) =>
+        `<button type="button" class="vm-opcao" data-opcao data-grupo="segmento" data-valor="${s}">${s}</button>`,
+    )
+    .join('');
+
+  return `
+  <form id="form-aplicacao" class="vm-form" enctype="multipart/form-data" novalidate>
+    <input type="hidden" name="slug" value="${escapeHtml(vaga.slug)}">
+    <input type="hidden" name="segmento" value="">
+
+    <p class="vm-form-erro" data-erro hidden role="alert"></p>
+
+    <!-- PASSO 1 -->
+    <section class="vm-passo" data-passo="1">
+      <h1 class="vm-title">Candidate-se agora</h1>
+      <p class="vm-lead">Vaga: ${escapeHtml(vaga.titulo)}</p>
+
+      <div class="vm-grid2">
+        <label class="vm-campo">Nome
+          <input type="text" name="nome" autocomplete="given-name" required>
+        </label>
+        <label class="vm-campo">Sobrenome
+          <input type="text" name="sobrenome" autocomplete="family-name" required>
+        </label>
+      </div>
+
+      <label class="vm-campo">E-mail
+        <input type="email" name="email" autocomplete="email" required>
+      </label>
+
+      <div class="vm-campo">Telefone
+        <div class="vm-tel">
+          <select name="ddi" aria-label="Código do país">${opcoesDdi}</select>
+          <input type="tel" name="telefone" inputmode="tel" placeholder="(11) 90000-0000" required>
+        </div>
+      </div>
+
+      <label class="vm-campo">Cidade <span class="vm-opcional">(opcional)</span>
+        <input type="text" name="cidade" autocomplete="address-level2">
+      </label>
+
+      <label class="vm-campo">URL do LinkedIn
+        <input type="url" name="linkedin_url" placeholder="https://linkedin.com/in/...">
+      </label>
+
+      <div class="vm-campo">Currículo (PDF)
+        <label class="vm-upload" data-upload>
+          <input type="file" name="curriculo" accept="application/pdf,.pdf" hidden>
+          <span class="vm-upload__icone" aria-hidden="true">⬆</span>
+          <span class="vm-upload__texto" data-upload-texto>Clique para enviar ou arraste seu PDF aqui</span>
+          <span class="vm-upload__dica">Somente .pdf · até 10 MB</span>
+        </label>
+      </div>
+
+      <button type="button" class="vm-btn vm-btn--primario" data-proximo>Próximo</button>
+      <p class="vm-rodape-nota">
+        Ao se candidatar, seus dados entram em nosso banco de talentos e podem ser usados para
+        esta e futuras oportunidades de vendas. Você pode solicitar a remoção a qualquer momento.
+      </p>
+    </section>
+
+    <!-- PASSO 2 -->
+    <section class="vm-passo" data-passo="2" hidden>
+      <h1 class="vm-title">Responda algumas perguntas para concluir sua candidatura</h1>
+
+      <div class="vm-campo">Anos de experiência em vendas
+        ${stepper('anos_experiencia', 0, 0, 50, 'anos')}
+      </div>
+
+      <div class="vm-campo">Segmento principal
+        <div class="vm-opcoes" data-grupo-opcoes="segmento">${segmentos}</div>
+      </div>
+
+      <label class="vm-campo">Ferramentas de CRM que domina
+        <input type="text" name="crm" placeholder="Ex.: HubSpot, Salesforce, Pipedrive">
+      </label>
+
+      <label class="vm-campo">Pretensão de remuneração (R$ fixo + variável/comissão)
+        <input type="text" name="pretensao" placeholder="Ex.: R$ 2.500 fixo + comissão (OTE 5k)">
+      </label>
+
+      <div class="vm-campo">Disponibilidade para início
+        ${stepper('disponibilidade_dias', 15, 0, 180, 'dias')}
+      </div>
+
+      <div class="vm-campo">Horas por semana disponíveis
+        ${stepper('horas_semana', 40, 1, 80, 'h/sem')}
+      </div>
+
+      <div class="vm-acoes">
+        <button type="button" class="vm-btn vm-btn--secundario" data-voltar>Voltar</button>
+        <button type="submit" class="vm-btn vm-btn--primario" data-enviar>Candidatar-me</button>
+      </div>
+    </section>
+  </form>`;
+}
+
 router.get('/aplicar/:slug', (req, res) => {
   const vaga = db.obterVagaPorSlug(req.params.slug);
-  const titulo = vaga ? `Aplicar — ${vaga.titulo}` : 'Aplicar';
+  if (!vaga) {
+    return res.status(404).send(
+      pagina({
+        titulo: 'Vaga nao encontrada',
+        tema: 'claro',
+        conteudo: placeholder({
+          titulo: 'Vaga nao encontrada',
+          descricao: 'O link da vaga pode estar incorreto ou a vaga foi encerrada.',
+          acao: botao('/', 'Voltar ao inicio', 'secundario'),
+        }),
+      }),
+    );
+  }
+
   res.send(
     pagina({
-      titulo,
+      titulo: `Candidatar-se — ${vaga.titulo}`,
       tema: 'claro',
       etapa: 1,
-      conteudo: placeholder({
-        kicker: vaga ? `Vaga: ${vaga.titulo}` : 'Aplicacao',
-        titulo: 'Aplicacao em 2 passos',
-        descricao:
-          'Passo 1: dados + currículo (PDF). Passo 2: perguntas extras de vendas. Formulario chega na Fase 1.',
-        acao: botao('/preparacao', 'Continuar'),
-      }),
+      conteudo: formularioAplicacao(vaga),
     }),
   );
 });
 
 // ── Tela 3: Preparacao ──
 router.get('/preparacao', (req, res) => {
+  // Reconhece a sessao do candidato pelo cookie (sem reescrever dados).
+  const candidato = session.loadCandidato(req);
+  const kicker = candidato ? `Olá, ${candidato.nome}` : 'Antes de comecar';
+  const descricao = candidato
+    ? 'Recebemos sua candidatura. A seguir você verá a duração estimada, os tópicos e as dicas para a entrevista. Não atualize a página durante a entrevista.'
+    : 'Duracao estimada, topicos abordados e dicas (lugar silencioso, internet estavel). Nao atualize a pagina durante a entrevista.';
+
   res.send(
     pagina({
       titulo: 'Preparacao para a entrevista',
       tema: 'claro',
       etapa: 2,
       conteudo: placeholder({
-        kicker: 'Antes de comecar',
+        kicker,
         titulo: 'Preparacao para a entrevista',
-        descricao:
-          'Duracao estimada, topicos abordados e dicas (lugar silencioso, internet estavel). Nao atualize a pagina durante a entrevista.',
+        descricao,
         acao: botao('/instrucoes', 'Continuar'),
       }),
     }),

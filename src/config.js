@@ -28,6 +28,12 @@ const config = {
   // Caminho do arquivo SQLite. Em producao aponta para o volume (/data/app.db).
   caminhoBanco: path.resolve(process.env.DATABASE_PATH || './data/app.db'),
 
+  // Pasta de curriculos (PDFs), no mesmo volume persistente do banco (ex.: /data/curriculos).
+  caminhoCurriculos: path.resolve(
+    path.dirname(process.env.DATABASE_PATH || './data/app.db'),
+    'curriculos',
+  ),
+
   sessao: {
     segredo: process.env.SESSION_SECRET || 'troque-isto',
   },

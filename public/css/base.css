@@ -255,6 +255,117 @@ html.tema-escuro .vm-funil__etapa--concluida .vm-funil__rotulo{ color:var(--vm-w
   border-top:1px solid color-mix(in srgb, var(--vm-gray-mid) 30%, transparent);
 }
 
+/* ── Formulario de Aplicacao (tema claro) ── */
+.vm-form{ display:flex; flex-direction:column; gap:1.1rem; width:100%; }
+.vm-passo{ display:flex; flex-direction:column; gap:1.1rem; }
+.vm-passo[hidden]{ display:none; }
+
+.vm-campo{ display:flex; flex-direction:column; gap:.4rem; font-weight:500; font-size:.95rem; }
+.vm-opcional{ color:var(--vm-gray-mid); font-weight:400; font-size:.85rem; }
+
+.vm-campo input,
+.vm-campo select,
+.vm-tel input,
+.vm-tel select{
+  font-family:var(--font-body);
+  font-size:1rem;
+  padding:.7rem .8rem;
+  min-height:48px;
+  border-radius:6px;
+  border:1px solid var(--vm-gray-mid);
+  background:var(--vm-white);
+  color:var(--vm-black);
+}
+.vm-campo input::placeholder{ color:var(--vm-gray-mid); }
+.vm-campo input:focus,
+.vm-campo select:focus,
+.vm-tel input:focus,
+.vm-tel select:focus{
+  outline:2px solid var(--vm-orange);
+  outline-offset:1px;
+  border-color:var(--vm-orange);
+}
+
+.vm-grid2{ display:grid; grid-template-columns:1fr; gap:1.1rem; }
+@media (min-width:560px){ .vm-grid2{ grid-template-columns:1fr 1fr; } }
+
+.vm-tel{ display:flex; gap:.5rem; }
+.vm-tel select{ flex:0 0 auto; max-width:42%; }
+.vm-tel input{ flex:1 1 auto; min-width:0; }
+
+/* Mensagem de erro */
+.vm-form-erro{
+  background:var(--vm-white);
+  border:1px solid var(--vm-orange);
+  border-left:4px solid var(--vm-orange);
+  color:var(--vm-black);
+  padding:.7rem .9rem;
+  border-radius:6px;
+  font-size:.92rem;
+}
+.vm-form-erro[hidden]{ display:none; }
+
+/* Area de upload */
+.vm-upload{
+  display:flex; flex-direction:column; align-items:center; gap:.35rem;
+  padding:1.6rem 1rem;
+  border:2px dashed var(--vm-gray-mid);
+  border-radius:8px;
+  background:var(--vm-white);
+  text-align:center;
+  cursor:pointer;
+  transition:border-color .15s ease;
+}
+.vm-upload:hover,
+.vm-upload--sobre{ border-color:var(--vm-orange); }
+.vm-upload--ok{ border-style:solid; border-color:var(--vm-orange); }
+.vm-upload__icone{ font-size:1.5rem; color:var(--vm-orange); }
+.vm-upload__texto{ font-weight:600; color:var(--vm-black); word-break:break-word; }
+.vm-upload__dica{ font-size:.8rem; color:var(--vm-gray-mid); }
+
+/* Stepper (- valor +) */
+.vm-stepper{ display:flex; align-items:center; gap:.5rem; }
+.vm-stepper__btn{
+  width:44px; height:44px;
+  border:1px solid var(--vm-orange);
+  background:var(--vm-white);
+  color:var(--vm-orange);
+  border-radius:6px;
+  font-size:1.4rem; line-height:1;
+  display:grid; place-items:center;
+}
+.vm-stepper__btn:hover{ background:var(--vm-orange); color:var(--vm-white); }
+.vm-stepper__input{
+  width:72px; text-align:center;
+  -moz-appearance:textfield;
+}
+.vm-stepper__input::-webkit-outer-spin-button,
+.vm-stepper__input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+.vm-stepper__sufixo{ color:var(--vm-gray-dark); font-size:.9rem; }
+
+/* Chips selecionaveis (segmento) */
+.vm-opcoes{ display:flex; flex-wrap:wrap; gap:.5rem; }
+.vm-opcao{
+  font-family:var(--font-body);
+  font-size:.95rem; font-weight:600;
+  padding:.55rem 1.1rem;
+  border-radius:999px;
+  border:1px solid var(--vm-gray-mid);
+  background:var(--vm-white);
+  color:var(--vm-gray-dark);
+}
+.vm-opcao--ativa{
+  border-color:var(--vm-orange);
+  background:var(--vm-orange);
+  color:var(--vm-black);
+}
+
+/* Acoes (Voltar / Candidatar-me) */
+.vm-acoes{ display:flex; gap:.75rem; flex-wrap:wrap; }
+.vm-acoes .vm-btn{ flex:1 1 auto; }
+
+.vm-rodape-nota{ font-size:.8rem; color:var(--vm-gray-mid); max-width:60ch; }
+
 /* ── Desktop: respiro maior ── */
 @media (min-width:768px){
   .vm-container{ padding-top:3rem; }
