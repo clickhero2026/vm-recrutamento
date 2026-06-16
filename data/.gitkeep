@@ -1,0 +1,3 @@
+# Mantem a pasta data/ no repositorio.
+# O arquivo app.db do SQLite vive aqui em desenvolvimento e e gitignored.
+# Em producao (EasyPanel) este caminho e um volume persistente montado em /data.

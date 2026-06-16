@@ -1,0 +1,11 @@
+<!-- Barra de progresso do funil (componente reutilizavel).
+     A largura do preenchimento vem da variavel inline --vm-progress (0-100%),
+     definida pelo servidor conforme a etapa atual. -->
+<div class="vm-progress" role="progressbar" aria-label="Progresso no funil"
+     aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{PROGRESSO_PCT}}"
+     style="--vm-progress: {{PROGRESSO_PCT}}%;">
+  <div class="vm-progress__track">
+    <div class="vm-progress__fill"></div>
+  </div>
+  <span class="vm-progress__label">{{PROGRESSO_LABEL}}</span>
+</div>

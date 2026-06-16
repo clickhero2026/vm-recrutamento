@@ -1,0 +1,25 @@
+# Dependencias
+/node_modules
+
+# Dados (volume persistente) - o .db nunca vai pro git
+/data/*
+!/data/.gitkeep
+
+# Banco SQLite em qualquer lugar (inclui arquivos WAL/SHM)
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Segredos
+.env
+.env.local
+
+# Logs e temporarios
+*.log
+npm-debug.log*
+.DS_Store
+
+# Uploads de candidatos (currículos) - chegam na Fase 1
+/uploads

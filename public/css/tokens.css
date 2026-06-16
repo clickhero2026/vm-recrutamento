@@ -1,0 +1,18 @@
+/* Design tokens — Identidade Vendedor Mestre.
+   Fonte da verdade visual. Nao usar cores fora desta paleta.
+   Maximo 3 cores por tela; laranja e destaque (com parcimonia); botao primario laranja.
+   Proibido: azul, roxo, verde, amarelo, vermelho puro, gradientes e transparencias coloridas. */
+:root{
+  --vm-black:#0D0B0A;        /* Preto Autoridade — base, fundos, texto, forca */
+  --vm-orange:#FF5500;       /* Laranja Fogo — destaque/CTA, COM PARCIMONIA */
+  --vm-orange-dark:#CC4400;
+  --vm-orange-light:#FF7733;
+  --vm-white:#FFFFFF;
+  --vm-offwhite:#F4F3F1;     /* Off-White Limpo — fundos claros */
+  --vm-gray-mid:#B8B6B2;     /* texto secundario */
+  --vm-gray-dark:#4A4845;    /* texto corrido */
+  --vm-bg:#EBEBEA;
+  --font-display:'Barlow Condensed',sans-serif;  /* titulos/logotipo, SEMPRE caixa alta */
+  --font-body:'Barlow',sans-serif;               /* corpo, sentence case */
+  --font-mono:'DM Mono',monospace;               /* numeros, opcional */
+}

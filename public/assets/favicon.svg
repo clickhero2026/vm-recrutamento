@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="6" fill="#0D0B0A"/>
+  <!-- Lamina/losango Vendedor Mestre em Laranja Fogo -->
+  <path d="M16 5 L27 16 L16 27 L5 16 Z" fill="#FF5500"/>
+</svg>

@@ -1,0 +1,21 @@
+{
+  "name": "vendedor-mestre-recrutamento",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema web de recrutamento automatico de vendedores (SDR/Closer) com entrevista por IA (agente Vera). Fase 0 - Fundacao.",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "migrate": "node src/db/migrate.js",
+    "seed": "node src/db/seed.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}
