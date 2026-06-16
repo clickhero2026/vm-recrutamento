@@ -68,6 +68,11 @@ function aplicacaoDeLinha(linha) {
 // ──────────────────────────────────────────────────────────────
 
 // Vagas
+function obterVaga(id) {
+  const linha = getDb().prepare('SELECT * FROM jobs WHERE id = ?').get(id);
+  return jobDeLinha(linha);
+}
+
 function obterVagaPorSlug(slug) {
   const linha = getDb().prepare('SELECT * FROM jobs WHERE slug = ?').get(slug);
   return jobDeLinha(linha);
@@ -169,6 +174,7 @@ module.exports = {
   getDb,
   aplicarSchema,
   // vagas
+  obterVaga,
   obterVagaPorSlug,
   obterVagaAtiva,
   listarVagas,

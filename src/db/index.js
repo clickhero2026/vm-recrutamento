@@ -16,6 +16,7 @@ module.exports = {
   aplicarSchema: driver.aplicarSchema,
 
   // vagas
+  obterVaga: driver.obterVaga,
   obterVagaPorSlug: driver.obterVagaPorSlug,
   obterVagaAtiva: driver.obterVagaAtiva,
   listarVagas: driver.listarVagas,

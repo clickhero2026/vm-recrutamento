@@ -366,6 +366,62 @@ html.tema-escuro .vm-funil__etapa--concluida .vm-funil__rotulo{ color:var(--vm-w
 
 .vm-rodape-nota{ font-size:.8rem; color:var(--vm-gray-mid); max-width:60ch; }
 
+/* ── Preparacao e Instrucoes ── */
+.vm-hero--centro{ align-items:center; text-align:center; }
+
+/* Lista "O que esperar" (definicao rotulo/valor) */
+.vm-info{ display:flex; flex-direction:column; gap:.25rem; }
+.vm-info dt{
+  font-family:var(--font-display);
+  text-transform:uppercase;
+  letter-spacing:.05em;
+  font-size:.78rem;
+  color:var(--vm-orange);
+  margin-top:.6rem;
+}
+.vm-info dt:first-child{ margin-top:0; }
+.vm-info dd{ margin:0 0 .2rem; }
+
+/* Listas com marcador laranja */
+.vm-lista{ list-style:none; display:flex; flex-direction:column; gap:.55rem; }
+.vm-lista li{ position:relative; padding-left:1.4rem; }
+.vm-lista li::before{
+  content:""; position:absolute; left:0; top:.55em;
+  width:8px; height:8px; border-radius:50%;
+  background:var(--vm-orange);
+}
+
+/* Aviso de destaque */
+.vm-aviso{
+  border-left:4px solid var(--vm-orange);
+  padding:.6rem .9rem;
+  font-weight:600;
+}
+html.tema-claro .vm-aviso{ background:var(--vm-white); color:var(--vm-black); }
+html.tema-escuro .vm-aviso{ background:color-mix(in srgb, var(--vm-white) 6%, transparent); color:var(--vm-white); }
+
+/* Painel de regras (Instrucoes, tema escuro) */
+.vm-painel-regras{ width:100%; }
+.vm-regras{ list-style:none; counter-reset:regra; display:flex; flex-direction:column; gap:.9rem; margin-top:.75rem; }
+.vm-regras li{
+  counter-increment:regra;
+  position:relative;
+  padding-left:2.6rem;
+  min-height:1.8rem;
+  display:flex; align-items:center;
+}
+.vm-regras li::before{
+  content:counter(regra);
+  position:absolute; left:0; top:0;
+  width:1.8rem; height:1.8rem;
+  border-radius:50%;
+  background:var(--vm-orange);
+  color:var(--vm-black);
+  font-family:var(--font-display);
+  font-weight:900;
+  display:grid; place-items:center;
+}
+
 /* ── Desktop: respiro maior ── */
 @media (min-width:768px){
   .vm-container{ padding-top:3rem; }

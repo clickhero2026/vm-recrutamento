@@ -258,27 +258,81 @@ router.get('/aplicar/:slug', (req, res) => {
   );
 });
 
+// Resolve a vaga + roteiro do candidato (pela sessao) ou da vaga ativa.
+function vagaERoteiroDaSessao(req) {
+  const candidato = session.loadCandidato(req);
+  const vaga = candidato ? db.obterVaga(candidato.job_id) : db.obterVagaAtiva();
+  const roteiro = vaga && vaga.roteiro_id ? db.obterRoteiro(vaga.roteiro_id) : null;
+  return { candidato, vaga, roteiro };
+}
+
+// Estima a duracao (faixa em minutos) a partir do roteiro (orientado a dados).
+function estimarDuracao(roteiro) {
+  const blocos = (roteiro && roteiro.estrutura && roteiro.estrutura.blocos) || {};
+  const n =
+    (blocos.abertura || []).length +
+    (blocos.competencias || []).length +
+    (blocos.fechamento || []).length;
+  const perguntas = n || (blocos.competencias || []).length || 6;
+  const min = Math.max(10, Math.round(perguntas * 1.5));
+  const max = Math.round(perguntas * 2);
+  return { min, max };
+}
+
 // ── Tela 3: Preparacao ──
 router.get('/preparacao', (req, res) => {
-  // Reconhece a sessao do candidato pelo cookie (sem reescrever dados).
-  const candidato = session.loadCandidato(req);
-  const kicker = candidato ? `Olá, ${candidato.nome}` : 'Antes de comecar';
-  const descricao = candidato
-    ? 'Recebemos sua candidatura. A seguir você verá a duração estimada, os tópicos e as dicas para a entrevista. Não atualize a página durante a entrevista.'
-    : 'Duracao estimada, topicos abordados e dicas (lugar silencioso, internet estavel). Nao atualize a pagina durante a entrevista.';
+  // Sessao validada via lib/session (o gate de redirecionamento fica na Fase 1D).
+  const { candidato, vaga, roteiro } = vagaERoteiroDaSessao(req);
+  const tituloVaga = vaga ? vaga.titulo : 'em aberto';
+  const { min, max } = estimarDuracao(roteiro);
+
+  const competencias = (roteiro && roteiro.estrutura && roteiro.estrutura.blocos
+    ? roteiro.estrutura.blocos.competencias
+    : []) || [];
+  const chipsTopicos = competencias.length
+    ? competencias
+        .map((c) => `<span class="vm-chip">${escapeHtml(c.nome)}</span>`)
+        .join('')
+    : '<span class="vm-chip">Experiência e fechamento em vendas</span>';
+
+  const conteudo = `
+    <section class="vm-hero">
+      ${candidato ? `<p class="vm-kicker">Olá, ${escapeHtml(candidato.nome)}</p>` : ''}
+      <h1 class="vm-title">Preparação para a entrevista</h1>
+      <p class="vm-lead">Você está a um passo de avançar para a vaga ${escapeHtml(tituloVaga)}.</p>
+    </section>
+
+    <section class="vm-secao">
+      <h2 class="vm-h2">O que esperar</h2>
+      <div class="vm-card">
+        <dl class="vm-info">
+          <dt>Formato</dt>
+          <dd>Entrevista por áudio com a Vera, nossa agente de recrutamento.</dd>
+          <dt>Duração estimada</dt>
+          <dd>~${min}–${max} minutos.</dd>
+          <dt>Áreas de foco</dt>
+          <dd><div class="vm-chips">${chipsTopicos}</div></dd>
+        </dl>
+      </div>
+    </section>
+
+    <section class="vm-secao">
+      <h2 class="vm-h2">Antes de começar</h2>
+      <ul class="vm-lista">
+        <li>Escolha um ambiente silencioso, sem interrupções.</li>
+        <li>Use uma conexão de internet estável.</li>
+        <li>Permita o acesso ao microfone quando solicitado (a câmera é opcional).</li>
+        <li>Funciona no celular ou no computador.</li>
+      </ul>
+    </section>
+
+    <p class="vm-aviso">Não atualize a página durante a entrevista.</p>
+    <p class="vm-rodape-nota">Um link para esta entrevista também foi enviado ao seu e-mail.</p>
+
+    ${botao('/instrucoes', 'Continuar')}`;
 
   res.send(
-    pagina({
-      titulo: 'Preparacao para a entrevista',
-      tema: 'claro',
-      etapa: 2,
-      conteudo: placeholder({
-        kicker,
-        titulo: 'Preparacao para a entrevista',
-        descricao,
-        acao: botao('/instrucoes', 'Continuar'),
-      }),
-    }),
+    pagina({ titulo: 'Preparação para a entrevista', tema: 'claro', etapa: 2, conteudo }),
   );
 });
 
@@ -302,18 +356,35 @@ router.get('/identificacao', (req, res) => {
 
 // ── Tela 5: Instrucoes ──
 router.get('/instrucoes', (req, res) => {
+  const regras = [
+    'A entrevista é gravada em áudio e pode ser compartilhada com a equipe de recrutamento.',
+    'Fique num ambiente silencioso. Use o botão "toque para falar" para gravar cada resposta.',
+    'Sinta-se à vontade para pedir que a Vera repita uma pergunta se precisar de mais clareza.',
+    'Toque para começar a responder e toque de novo para terminar cada resposta.',
+  ]
+    .map((r) => `<li>${escapeHtml(r)}</li>`)
+    .join('');
+
+  const conteudo = `
+    <section class="vm-hero vm-hero--centro">
+      <p class="vm-kicker">Agente Vera</p>
+      <h1 class="vm-title">Instruções da entrevista</h1>
+    </section>
+
+    <div class="vm-card vm-painel-regras">
+      <h2 class="vm-h2">Antes de iniciar, leia com atenção</h2>
+      <ol class="vm-regras">${regras}</ol>
+    </div>
+
+    ${botao('/permissao-camera', 'Pode começar, iniciar entrevista')}`;
+
   res.send(
     pagina({
-      titulo: 'Instrucoes da entrevista',
+      titulo: 'Instruções da entrevista',
       tema: 'escuro',
       etapa: 2,
-      conteudo: placeholder({
-        kicker: 'Regras',
-        titulo: 'Instrucoes da entrevista',
-        descricao:
-          'A entrevista e gravada em audio para avaliacao. Use push-to-talk para responder. Sem compartilhamento de tela.',
-        acao: botao('/permissao-camera', 'Pode comecar, iniciar entrevista'),
-      }),
+      comOrbe: true,
+      conteudo,
     }),
   );
 });
