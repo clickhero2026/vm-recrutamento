@@ -32,4 +32,11 @@ module.exports = {
   obterAplicacao: driver.obterAplicacao,
   obterAplicacaoPorToken: driver.obterAplicacaoPorToken,
   atualizarStatusAplicacao: driver.atualizarStatusAplicacao,
+
+  // entrevistas
+  criarInterview: driver.criarInterview,
+  obterInterview: driver.obterInterview,
+  finalizarInterview: driver.finalizarInterview,
+  criarTurno: driver.criarTurno,
+  contarTurnos: driver.contarTurnos,
 };

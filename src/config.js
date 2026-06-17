@@ -34,6 +34,12 @@ const config = {
     'curriculos',
   ),
 
+  // Pasta dos audios de resposta das entrevistas (ex.: /data/entrevistas).
+  caminhoEntrevistas: path.resolve(
+    path.dirname(process.env.DATABASE_PATH || './data/app.db'),
+    'entrevistas',
+  ),
+
   sessao: {
     segredo: process.env.SESSION_SECRET || 'troque-isto',
   },
@@ -44,6 +50,14 @@ const config = {
 
   recrutador: {
     email: process.env.RECRUITER_EMAIL || '',
+  },
+
+  entrevista: {
+    // Mock = sem chamadas externas (custo zero). Enquanto os providers reais
+    // (STT/LLM/TTS) nao estao ligados, o mock e o unico caminho funcional.
+    // Em producao real, defina INTERVIEW_MOCK=false (exige chaves de API).
+    mock: bool(process.env.INTERVIEW_MOCK, true),
+    maxDuracaoMin: num(process.env.MAX_DURACAO_MIN, 20),
   },
 
   // Selecao de provedores (os adaptadores reais chegam na Fase 3/4).

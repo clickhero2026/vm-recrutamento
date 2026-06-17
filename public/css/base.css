@@ -230,10 +230,17 @@ html.tema-escuro .vm-funil__etapa--concluida .vm-funil__rotulo{ color:var(--vm-w
   border:2px solid color-mix(in srgb, var(--vm-orange) 70%, transparent);
   opacity:0;
 }
-/* Estados (a logica liga as classes na Fase 3) */
+/* Estados: idle, falando, gravando, pensando */
 .vm-orb--idle .vm-orb__core{ animation:vm-orb-respira 3.2s ease-in-out infinite; }
 .vm-orb--falando .vm-orb__core{ animation:vm-orb-pulsa 1s ease-in-out infinite; }
 .vm-orb--gravando .vm-orb__ring{ opacity:1; animation:vm-orb-grava 1.4s ease-out infinite; }
+/* Pensando: nucleo esmaecido + anel girando como spinner (monocromatico, sem gradiente) */
+.vm-orb--pensando .vm-orb__core{ opacity:.55; animation:vm-orb-respira 1.6s ease-in-out infinite; }
+.vm-orb--pensando .vm-orb__ring{
+  opacity:1;
+  border-color:var(--vm-orange) transparent transparent transparent;
+  animation:vm-orb-gira 1s linear infinite;
+}
 
 @keyframes vm-orb-respira{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.04); } }
 @keyframes vm-orb-pulsa{
@@ -241,9 +248,11 @@ html.tema-escuro .vm-funil__etapa--concluida .vm-funil__rotulo{ color:var(--vm-w
   50%{ transform:scale(1.08); box-shadow:0 0 40px color-mix(in srgb, var(--vm-orange) 85%, transparent); }
 }
 @keyframes vm-orb-grava{ 0%{ transform:scale(1); opacity:.9; } 100%{ transform:scale(1.5); opacity:0; } }
+@keyframes vm-orb-gira{ to{ transform:rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce){
   .vm-orb__core, .vm-orb__ring{ animation:none !important; }
+  .vm-ptt--gravando{ animation:none !important; }
 }
 
 /* ── Rodape ── */
@@ -475,6 +484,61 @@ html.tema-escuro .vm-aviso{ background:color-mix(in srgb, var(--vm-white) 6%, tr
   text-underline-offset:3px;
 }
 .vm-link-discreto:hover{ color:var(--vm-orange); }
+
+/* ── Tela 10: Entrevista ── */
+.vm-entrevista{
+  position:relative;
+  display:flex; flex-direction:column; align-items:center;
+  gap:1rem; width:100%; min-height:60vh;
+}
+.vm-entrevista__topo{
+  display:flex; justify-content:space-between; align-items:flex-start;
+  gap:1rem; width:100%;
+}
+.vm-chips--progresso{ flex:1 1 auto; gap:.4rem; }
+.vm-chips--progresso .vm-chip{ font-size:.7rem; padding:.25rem .55rem; }
+.vm-chip--concluido{ background:var(--vm-orange); color:var(--vm-black); border-color:var(--vm-orange); }
+.vm-chip--atual{ border-color:var(--vm-orange); color:var(--vm-orange); font-weight:700; }
+.vm-chip--futuro{ border-color:var(--vm-gray-mid); color:var(--vm-gray-mid); }
+.vm-timer{ font-family:var(--font-mono); font-size:1rem; color:var(--vm-orange); white-space:nowrap; }
+
+.vm-vera-estado{ min-height:1.2rem; color:var(--vm-gray-mid); font-size:.9rem; text-align:center; }
+.vm-pergunta{ font-size:1.3rem; line-height:1.4; text-align:center; max-width:42ch; }
+
+.vm-entrevista__controles{
+  display:flex; flex-direction:column; gap:.6rem;
+  width:100%; max-width:420px;
+}
+.vm-ptt{ min-height:64px; font-size:1.1rem; }
+.vm-ptt--gravando{
+  background:var(--vm-orange-dark); color:var(--vm-white);
+  animation:vm-ptt-pulsa 1.3s ease-in-out infinite;
+}
+@keyframes vm-ptt-pulsa{
+  0%,100%{ box-shadow:0 0 0 0 color-mix(in srgb, var(--vm-orange) 55%, transparent); }
+  50%{ box-shadow:0 0 0 12px color-mix(in srgb, var(--vm-orange) 0%, transparent); }
+}
+
+/* Thumbnail da webcam (so aparece se a camera foi concedida) */
+.vm-cam-thumb{
+  position:fixed; left:1rem; bottom:1rem;
+  width:96px; height:72px;
+  border-radius:8px; overflow:hidden;
+  border:2px solid var(--vm-orange);
+  background:var(--vm-black);
+  z-index:5;
+}
+.vm-cam-thumb[hidden]{ display:none; }
+.vm-cam-thumb video{ width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
+
+/* Overlay inicial (destrava o audio no iOS) */
+.vm-iniciar{
+  position:fixed; inset:0; z-index:20;
+  background:var(--vm-black);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:1rem; text-align:center; padding:2rem 1.25rem;
+}
+.vm-iniciar[hidden]{ display:none; }
 
 /* ── Desktop: respiro maior ── */
 @media (min-width:768px){

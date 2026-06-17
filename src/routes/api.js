@@ -13,10 +13,12 @@ const { config } = require('../config');
 const db = require('../db');
 const session = require('../lib/session');
 const { extrairTextoPdf } = require('../lib/curriculo');
+const entrevista = require('../lib/entrevista');
 
 const router = express.Router();
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // 25 MB (resposta de audio push-to-talk)
 
 // Upload em memoria: validamos tipo/tamanho e so gravamos no disco depois de
 // gerar o token (o nome do arquivo e <token>.pdf).
@@ -34,8 +36,32 @@ const upload = multer({
   },
 }).single('curriculo');
 
+// Upload do audio de resposta (push-to-talk). Aceita audio/* (webm/ogg/mp4...).
+const uploadAudio = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_AUDIO_BYTES },
+  fileFilter(req, file, cb) {
+    if (!/^audio\//.test(file.mimetype)) {
+      const erro = new Error('Formato de áudio inválido.');
+      erro.code = 'TIPO_INVALIDO';
+      return cb(erro);
+    }
+    cb(null, true);
+  },
+}).single('audio');
+
 function emailValido(valor) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor);
+}
+
+// Exige candidato identificado (versao API: responde 401 JSON em vez de redirecionar).
+function candidatoApi(req, res) {
+  const candidato = session.loadCandidato(req);
+  if (!candidato) {
+    res.status(401).json({ ok: false, erro: 'Sessão expirada. Faça a identificação novamente.' });
+    return null;
+  }
+  return candidato;
 }
 
 function naoImplementado(fase) {
@@ -189,13 +215,146 @@ router.post('/identificacao', (req, res) => {
   return res.json({ ok: true, redirect: '/preparacao' });
 });
 
-// Inicia entrevista, retorna 1a pergunta (texto + audio)
-router.post('/interview/start', naoImplementado('Fase 3'));
+// Resolve o roteiro de uma vaga (ou null).
+function roteiroDaVaga(vaga) {
+  return vaga && vaga.roteiro_id ? db.obterRoteiro(vaga.roteiro_id) : null;
+}
 
-// Recebe audio -> STT -> proxima pergunta (texto + audio)
-router.post('/interview/answer', naoImplementado('Fase 3'));
+// URL do audio da fala da Vera. Em mock, arquivo estatico. (Fase 3-real: TTS.)
+function audioDaFala() {
+  return entrevista.AUDIO_MOCK;
+}
 
-// Encerra, gera relatorio, envia e-mail
-router.post('/interview/finish', naoImplementado('Fase 4'));
+// ── POST /api/interview/start ── inicia a entrevista e devolve a 1a pergunta
+router.post('/interview/start', (req, res) => {
+  const candidato = candidatoApi(req, res);
+  if (!candidato) return undefined;
+
+  const vaga = db.obterVaga(candidato.job_id);
+  const roteiro = roteiroDaVaga(vaga);
+  const perguntas = entrevista.montarPerguntas(roteiro);
+
+  const interviewId = db.criarInterview({
+    application_id: candidato.id,
+    perfil: vaga ? vaga.perfil : 'SDR',
+    roteiro_id: vaga ? vaga.roteiro_id : null,
+    status: 'iniciada',
+  });
+  db.atualizarStatusAplicacao(candidato.id, 'em_entrevista');
+
+  // 1o turno do agente (Vera faz a 1a pergunta)
+  db.criarTurno({ interview_id: interviewId, ordem: 1, autor: 'agente', texto: perguntas[0].texto });
+
+  return res.json({
+    ...entrevista.payloadPergunta({
+      interviewId,
+      perguntas,
+      indice: 0,
+      audioUrl: audioDaFala(),
+    }),
+    agente: config.agente.nome,
+    max_duracao_min: config.entrevista.maxDuracaoMin,
+    mock: config.entrevista.mock,
+  });
+});
+
+// ── POST /api/interview/answer ── recebe o audio e devolve a proxima pergunta
+router.post('/interview/answer', (req, res) => {
+  uploadAudio(req, res, async (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ ok: false, erro: 'O áudio enviado é muito grande.' });
+      }
+      return res.status(400).json({ ok: false, erro: 'Não foi possível processar o áudio.' });
+    }
+
+    const candidato = candidatoApi(req, res);
+    if (!candidato) return undefined;
+
+    const interviewId = Number(req.body.interview_id);
+    const entrevistaRow = db.obterInterview(interviewId);
+    if (!entrevistaRow || entrevistaRow.application_id !== candidato.id) {
+      return res.status(404).json({ ok: false, erro: 'Entrevista não encontrada.' });
+    }
+
+    const roteiro = entrevistaRow.roteiro_id ? db.obterRoteiro(entrevistaRow.roteiro_id) : null;
+    const perguntas = entrevista.montarPerguntas(roteiro);
+
+    // Quantas perguntas a Vera ja fez -> proxima e o indice seguinte (0-based).
+    const proximoIndice = db.contarTurnos(interviewId, 'agente');
+
+    // Salva o turno do candidato. Em mock, nao transcrevemos (STT e Fase 3-real),
+    // mas guardamos o audio no volume persistente para exercitar a persistencia.
+    let audioPath = null;
+    if (req.file) {
+      try {
+        const dir = path.join(config.caminhoEntrevistas, String(interviewId));
+        fs.mkdirSync(dir, { recursive: true });
+        audioPath = path.join(dir, `${proximoIndice}.webm`);
+        fs.writeFileSync(audioPath, req.file.buffer);
+      } catch (e) {
+        console.error('[interview/answer] falha ao salvar audio:', e.message);
+        audioPath = null;
+      }
+    }
+    const textoCandidato = config.entrevista.mock
+      ? '[resposta de áudio recebida — transcrição na Fase 3-real]'
+      : '';
+    db.criarTurno({
+      interview_id: interviewId,
+      ordem: db.contarTurnos(interviewId) + 1,
+      autor: 'candidato',
+      texto: textoCandidato,
+      audio_path: audioPath,
+    });
+
+    // Acabaram as perguntas -> encerra.
+    if (proximoIndice >= perguntas.length) {
+      db.finalizarInterview(interviewId);
+      db.atualizarStatusAplicacao(candidato.id, 'concluido');
+      return res.json({
+        ok: true,
+        encerrar: true,
+        interview_id: interviewId,
+        pergunta: entrevista.FALA_FECHAMENTO,
+        audio_url: audioDaFala(),
+        topicos: entrevista.topicosUnicos(perguntas).map((nome) => ({ nome, estado: 'concluido' })),
+      });
+    }
+
+    // Proxima pergunta da Vera.
+    db.criarTurno({
+      interview_id: interviewId,
+      ordem: db.contarTurnos(interviewId) + 1,
+      autor: 'agente',
+      texto: perguntas[proximoIndice].texto,
+    });
+
+    return res.json(
+      entrevista.payloadPergunta({
+        interviewId,
+        perguntas,
+        indice: proximoIndice,
+        audioUrl: audioDaFala(),
+      }),
+    );
+  });
+});
+
+// ── POST /api/interview/finish ── encerra a entrevista
+// TODO (Fase 4): gerar relatorio (resumo + pontuacoes) e enviar ao recrutador (Resend).
+router.post('/interview/finish', (req, res) => {
+  const candidato = candidatoApi(req, res);
+  if (!candidato) return undefined;
+
+  const interviewId = Number(req.body.interview_id);
+  const entrevistaRow = db.obterInterview(interviewId);
+  if (!entrevistaRow || entrevistaRow.application_id !== candidato.id) {
+    return res.status(404).json({ ok: false, erro: 'Entrevista não encontrada.' });
+  }
+  db.finalizarInterview(interviewId);
+  db.atualizarStatusAplicacao(candidato.id, 'concluido');
+  return res.json({ ok: true, redirect: '/finalizacao' });
+});
 
 module.exports = router;

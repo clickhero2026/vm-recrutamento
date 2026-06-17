@@ -545,3 +545,258 @@ const VM_MIDIA = {
     btn.textContent = 'Continuar';
   });
 })();
+
+// ── Tela 10: Entrevista (loop push-to-talk com a Vera) ──
+(function () {
+  const tela = document.querySelector('[data-entrevista]');
+  if (!tela) return;
+
+  const orbe = tela.querySelector('[data-orbe]');
+  const estadoTexto = tela.querySelector('[data-estado-texto]');
+  const elPergunta = tela.querySelector('[data-pergunta]');
+  const elChips = tela.querySelector('[data-chips]');
+  const elTimer = tela.querySelector('[data-timer]');
+  const elErro = tela.querySelector('[data-erro]');
+  const btnPtt = tela.querySelector('[data-ptt]');
+  const btnRepetir = tela.querySelector('[data-repetir]');
+  const overlayIniciar = tela.querySelector('[data-iniciar]');
+  const btnIniciar = tela.querySelector('[data-iniciar-btn]');
+  const audio = tela.querySelector('[data-audio]');
+  const camThumb = tela.querySelector('[data-cam-thumb]');
+  const camVideo = tela.querySelector('[data-cam-video]');
+
+  let interviewId = null;
+  let ultimoAudioUrl = null;
+  let gravando = false;
+  let recorder = null;
+  let chunks = [];
+  let micStream = null;
+  let camStream = null;
+  let timerId = null;
+  let inicioMs = 0;
+  let encerrando = false;
+
+  const ESTADOS = {
+    idle: '',
+    falando: 'Vera está falando…',
+    gravando: 'Gravando… (toque para enviar)',
+    pensando: 'Vera está pensando…',
+  };
+
+  function setOrbe(estado) {
+    orbe.classList.remove('vm-orb--idle', 'vm-orb--falando', 'vm-orb--gravando', 'vm-orb--pensando');
+    orbe.classList.add(`vm-orb--${estado}`);
+    estadoTexto.textContent = ESTADOS[estado] || '';
+  }
+
+  function mostrarErro(msg) {
+    elErro.textContent = msg || '';
+    elErro.hidden = !msg;
+  }
+
+  function renderChips(topicos) {
+    if (!Array.isArray(topicos)) return;
+    elChips.innerHTML = topicos
+      .map(
+        (t) =>
+          `<span class="vm-chip vm-chip--${t.estado}">${(t.nome || '').replace(/[<>&]/g, '')}</span>`,
+      )
+      .join('');
+  }
+
+  function tocarFala(url, aoTerminar) {
+    if (!url) return;
+    setOrbe('falando');
+    audio.src = url;
+    audio.onended = () => {
+      setOrbe('idle');
+      if (aoTerminar) aoTerminar();
+    };
+    audio.play().catch(() => {
+      // Se o navegador bloquear, segue mesmo assim (texto sempre visivel).
+      setOrbe('idle');
+      if (aoTerminar) aoTerminar();
+    });
+  }
+
+  function formatarTempo(ms) {
+    const s = Math.floor(ms / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    return `${mm}:${ss}`;
+  }
+
+  function iniciarTimer() {
+    inicioMs = Date.now();
+    timerId = setInterval(() => {
+      elTimer.textContent = formatarTempo(Date.now() - inicioMs);
+    }, 1000);
+  }
+
+  function pararTudo() {
+    if (timerId) clearInterval(timerId);
+    if (recorder && recorder.state !== 'inactive') {
+      try { recorder.stop(); } catch (e) { /* ignore */ }
+    }
+    VM_MIDIA.pararTracks(micStream);
+    VM_MIDIA.pararTracks(camStream);
+    micStream = null;
+    camStream = null;
+  }
+
+  // Thumbnail da webcam — apenas se a camera ja foi concedida (nao pede prompt aqui).
+  async function talvezMostrarCamera() {
+    try {
+      if (!navigator.permissions || !navigator.permissions.query) return;
+      const status = await navigator.permissions.query({ name: 'camera' });
+      if (status.state !== 'granted') return;
+      camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      camVideo.srcObject = camStream;
+      camThumb.hidden = false;
+    } catch (e) {
+      // Sem camera concedida ou navegador sem suporte: simplesmente nao mostra.
+    }
+  }
+
+  function aplicarResposta(dados) {
+    if (dados.encerrar) {
+      encerrando = true;
+      elPergunta.textContent = dados.pergunta || '';
+      if (Array.isArray(dados.topicos)) renderChips(dados.topicos);
+      btnPtt.hidden = true;
+      btnRepetir.hidden = true;
+      tocarFala(dados.audio_url, () => {
+        window.location = '/finalizacao';
+      });
+      return;
+    }
+    elPergunta.textContent = dados.pergunta || '';
+    ultimoAudioUrl = dados.audio_url;
+    if (Array.isArray(dados.topicos)) renderChips(dados.topicos);
+    tocarFala(dados.audio_url);
+    btnPtt.disabled = false;
+    btnPtt.textContent = 'Toque para falar';
+  }
+
+  async function iniciarEntrevista() {
+    mostrarErro('');
+    try {
+      const resp = await fetch('/api/interview/start', { method: 'POST' });
+      const dados = await resp.json();
+      if (!resp.ok || !dados.ok) {
+        mostrarErro(dados.erro || 'Não foi possível iniciar a entrevista.');
+        return;
+      }
+      interviewId = dados.interview_id;
+      ultimoAudioUrl = dados.audio_url;
+      elPergunta.textContent = dados.pergunta || '';
+      renderChips(dados.topicos);
+      btnPtt.hidden = false;
+      btnRepetir.hidden = false;
+      iniciarTimer();
+      tocarFala(dados.audio_url);
+      talvezMostrarCamera();
+    } catch (e) {
+      mostrarErro('Falha de conexão ao iniciar a entrevista.');
+    }
+  }
+
+  function escolherMime() {
+    const tipos = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+    for (const t of tipos) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
+    }
+    return '';
+  }
+
+  async function comecarGravacao() {
+    mostrarErro('');
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      mostrarErro(VM_MIDIA.mensagemErro(e, 'microfone'));
+      return;
+    }
+    const mime = escolherMime();
+    recorder = mime ? new MediaRecorder(micStream, { mimeType: mime }) : new MediaRecorder(micStream);
+    chunks = [];
+    recorder.ondataavailable = (ev) => {
+      if (ev.data && ev.data.size > 0) chunks.push(ev.data);
+    };
+    recorder.onstop = enviarResposta;
+    recorder.start();
+    gravando = true;
+    setOrbe('gravando');
+    btnPtt.textContent = 'Gravando… (toque para enviar)';
+    btnPtt.classList.add('vm-ptt--gravando');
+  }
+
+  async function enviarResposta() {
+    gravando = false;
+    btnPtt.classList.remove('vm-ptt--gravando');
+    VM_MIDIA.pararTracks(micStream);
+    micStream = null;
+    setOrbe('pensando');
+    btnPtt.disabled = true;
+
+    const tipo = recorder && recorder.mimeType ? recorder.mimeType : 'audio/webm';
+    const blob = new Blob(chunks, { type: tipo });
+    const form = new FormData();
+    form.append('interview_id', interviewId);
+    form.append('audio', blob, 'resposta.webm');
+
+    try {
+      const resp = await fetch('/api/interview/answer', { method: 'POST', body: form });
+      const dados = await resp.json();
+      if (!resp.ok || !dados.ok) {
+        mostrarErro(dados.erro || 'Não foi possível enviar sua resposta.');
+        setOrbe('idle');
+        btnPtt.disabled = false;
+        btnPtt.textContent = 'Toque para falar';
+        return;
+      }
+      aplicarResposta(dados);
+    } catch (e) {
+      mostrarErro('Falha de conexão ao enviar sua resposta. Tente novamente.');
+      setOrbe('idle');
+      btnPtt.disabled = false;
+      btnPtt.textContent = 'Toque para falar';
+    }
+  }
+
+  // Push-to-talk: 1o toque grava; 2o toque envia.
+  btnPtt.addEventListener('click', () => {
+    if (encerrando) return;
+    if (gravando) {
+      if (recorder && recorder.state !== 'inactive') recorder.stop();
+    } else {
+      comecarGravacao();
+    }
+  });
+
+  // Repetir pergunta: retoca o ultimo audio (sem nova chamada ao servidor).
+  btnRepetir.addEventListener('click', () => {
+    if (!gravando && ultimoAudioUrl) tocarFala(ultimoAudioUrl);
+  });
+
+  // Inicio (gesto do usuario destrava o audio no iOS).
+  btnIniciar.addEventListener('click', async () => {
+    overlayIniciar.hidden = true;
+    // Prime o elemento de audio dentro do gesto para destravar no iOS.
+    try {
+      audio.muted = true;
+      await audio.play().catch(() => {});
+      audio.pause();
+      audio.currentTime = 0;
+      audio.muted = false;
+    } catch (e) { /* ignore */ }
+    iniciarEntrevista();
+  });
+
+  window.addEventListener('pagehide', pararTudo);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && gravando && recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+  });
+})();

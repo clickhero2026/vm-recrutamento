@@ -496,23 +496,48 @@ router.get('/teste-microfone', exigirCandidato, (req, res) => {
   res.send(pagina({ titulo: 'Teste seu microfone', tema: 'escuro', etapa: 3, conteudo }));
 });
 
-// ── Tela 10: Entrevista ──
-router.get('/entrevista', (req, res) => {
-  res.send(
-    pagina({
-      titulo: 'Entrevista',
-      tema: 'escuro',
-      comOrbe: true,
-      etapa: 4,
-      conteudo: placeholder({
-        kicker: 'Agente Vera',
-        titulo: 'Area de entrevista',
-        descricao:
-          'Loop de audio push-to-talk com a Vera (pergunta, ouve, gera a proxima pergunta). Motor chega na Fase 3.',
-        acao: botao('/finalizacao', 'Encerrar (placeholder)', 'secundario'),
-      }),
-    }),
-  );
+// ── Tela 10: Entrevista (push-to-talk com a Vera) ──
+router.get('/entrevista', exigirCandidato, (req, res) => {
+  const conteudo = `
+    <div class="vm-entrevista" data-entrevista>
+      <div class="vm-entrevista__topo">
+        <div class="vm-chips vm-chips--progresso" data-chips aria-label="Progresso por tópico"></div>
+        <div class="vm-timer" data-timer role="timer" aria-label="Tempo decorrido">00:00</div>
+      </div>
+
+      <div class="vm-orb vm-orb--idle" data-orbe aria-hidden="true">
+        <div class="vm-orb__halo"></div>
+        <div class="vm-orb__core"></div>
+        <div class="vm-orb__ring"></div>
+      </div>
+      <p class="vm-vera-estado" data-estado-texto aria-live="polite"></p>
+
+      <p class="vm-kicker">Vera pergunta</p>
+      <p class="vm-pergunta" data-pergunta>Preparando sua entrevista…</p>
+
+      <p class="vm-form-erro" data-erro hidden role="alert"></p>
+
+      <div class="vm-entrevista__controles">
+        <button type="button" class="vm-btn vm-btn--primario vm-ptt" data-ptt hidden>Toque para falar</button>
+        <button type="button" class="vm-btn vm-btn--secundario" data-repetir hidden>Repetir pergunta</button>
+      </div>
+
+      <div class="vm-cam-thumb" data-cam-thumb hidden>
+        <video data-cam-video autoplay muted playsinline></video>
+      </div>
+
+      <!-- Overlay inicial: destrava o audio no iOS (exige gesto do usuario) -->
+      <div class="vm-iniciar" data-iniciar>
+        <p class="vm-kicker">Agente Vera</p>
+        <h1 class="vm-title">Tudo pronto?</h1>
+        <p class="vm-lead">Toque para iniciar. A Vera vai falar e você responde com o botão de microfone.</p>
+        <button type="button" class="vm-btn vm-btn--primario" data-iniciar-btn>Iniciar entrevista</button>
+      </div>
+
+      <audio data-audio playsinline></audio>
+    </div>`;
+
+  res.send(pagina({ titulo: 'Entrevista', tema: 'escuro', etapa: 4, conteudo }));
 });
 
 // ── Tela 11: Finalizacao ──

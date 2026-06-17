@@ -170,6 +170,57 @@ function atualizarStatusAplicacao(id, status) {
   getDb().prepare('UPDATE applications SET status = ? WHERE id = ?').run(status, id);
 }
 
+// Entrevistas
+function criarInterview(entrevista) {
+  const info = getDb().prepare(`
+    INSERT INTO interviews (application_id, perfil, roteiro_id, status)
+    VALUES (@application_id, @perfil, @roteiro_id, @status)
+  `).run({
+    application_id: entrevista.application_id,
+    perfil: entrevista.perfil,
+    roteiro_id: entrevista.roteiro_id || null,
+    status: entrevista.status || 'iniciada',
+  });
+  return Number(info.lastInsertRowid);
+}
+
+function obterInterview(id) {
+  return getDb().prepare('SELECT * FROM interviews WHERE id = ?').get(id) || null;
+}
+
+function finalizarInterview(id) {
+  getDb()
+    .prepare("UPDATE interviews SET status = 'concluido', finalizado_em = datetime('now') WHERE id = ?")
+    .run(id);
+}
+
+// Turnos da conversa
+function criarTurno(turno) {
+  const info = getDb().prepare(`
+    INSERT INTO interview_turns (interview_id, ordem, autor, texto, audio_path)
+    VALUES (@interview_id, @ordem, @autor, @texto, @audio_path)
+  `).run({
+    interview_id: turno.interview_id,
+    ordem: turno.ordem,
+    autor: turno.autor,
+    texto: turno.texto || null,
+    audio_path: turno.audio_path || null,
+  });
+  return Number(info.lastInsertRowid);
+}
+
+// Conta turnos da entrevista (opcionalmente por autor).
+function contarTurnos(interviewId, autor) {
+  if (autor) {
+    return getDb()
+      .prepare('SELECT COUNT(*) AS n FROM interview_turns WHERE interview_id = ? AND autor = ?')
+      .get(interviewId, autor).n;
+  }
+  return getDb()
+    .prepare('SELECT COUNT(*) AS n FROM interview_turns WHERE interview_id = ?')
+    .get(interviewId).n;
+}
+
 module.exports = {
   getDb,
   aplicarSchema,
@@ -188,4 +239,10 @@ module.exports = {
   obterAplicacao,
   obterAplicacaoPorToken,
   atualizarStatusAplicacao,
+  // entrevistas
+  criarInterview,
+  obterInterview,
+  finalizarInterview,
+  criarTurno,
+  contarTurnos,
 };
