@@ -303,58 +303,80 @@ router.post('/interview/start', async (req, res) => {
   const candidato = candidatoApi(req, res);
   if (!candidato) return undefined;
 
-  // RETOMADA: se ja existe uma entrevista em andamento para esta application,
-  // devolve o estado atual (mesma pergunta, mesmos turnos) sem criar entrevista
-  // nem turno novo e sem tocar em nenhum provedor.
-  const emAndamento = db.obterInterviewEmAndamentoPorAplicacao(candidato.id);
-  if (emAndamento) {
+  try {
+    // RETOMADA: so retomamos se existe uma entrevista em andamento VALIDA — isto e,
+    // com pelo menos a abertura (1 turno do agente) ja gravada. Uma linha "em
+    // andamento" sem nenhum turno do agente e um registro orfao (um start anterior
+    // que morreu antes de gravar a abertura); nesse caso NAO devolvemos um estado
+    // vazio: criamos uma entrevista nova, como no inicio normal.
+    const emAndamento = db.obterInterviewEmAndamentoPorAplicacao(candidato.id);
+    if (emAndamento && db.contarTurnos(emAndamento.id, 'agente') > 0) {
+      return res.json({
+        ...payloadEstadoAtual(emAndamento),
+        agente: config.agente.nome,
+        max_duracao_min: config.entrevista.maxDuracaoMin,
+        decorrido_ms: entrevista.decorridoMs(emAndamento.iniciado_em),
+        mock: config.entrevista.mock,
+        retomada: true,
+      });
+    }
+    // Registro orfao (em andamento, porem sem abertura): encerra para nao reaparecer
+    // na proxima retomada e segue para criar uma entrevista nova.
+    if (emAndamento) {
+      console.warn(
+        `[interview/start] entrevista ${emAndamento.id} em andamento sem abertura (orfa) — criando uma nova (application_id=${candidato.id}).`,
+      );
+      db.finalizarInterview(emAndamento.id);
+    }
+
+    const vaga = db.obterVaga(candidato.job_id);
+    const roteiro = roteiroDaVaga(vaga);
+    const perguntas = entrevista.montarPerguntas(roteiro);
+
+    const interviewId = db.criarInterview({
+      application_id: candidato.id,
+      perfil: vaga ? vaga.perfil : 'SDR',
+      roteiro_id: vaga ? vaga.roteiro_id : null,
+      status: 'iniciada',
+    });
+    db.atualizarStatusAplicacao(candidato.id, 'em_entrevista');
+
+    // 1a pergunta da Vera = abertura do roteiro (deterministica, orientada a dados).
+    const textoAbertura = perguntas[0].texto;
+    db.criarTurno({ interview_id: interviewId, ordem: 1, autor: 'agente', texto: textoAbertura });
+
+    // Audio: mock = arquivo estatico; real = TTS da abertura.
+    let audioUrl = entrevista.AUDIO_MOCK;
+    if (!config.entrevista.mock) {
+      try {
+        audioUrl = await sintetizarESalvar(textoAbertura, interviewId, 1);
+      } catch (e) {
+        console.error('[interview/start] falha no TTS de abertura:', e.message);
+        return res
+          .status(502)
+          .json({ ok: false, erro: 'Não foi possível iniciar a voz da entrevista. Tente novamente.' });
+      }
+    }
+
     return res.json({
-      ...payloadEstadoAtual(emAndamento),
+      ...entrevista.payloadPergunta({ interviewId, perguntas, indice: 0, audioUrl }),
       agente: config.agente.nome,
       max_duracao_min: config.entrevista.maxDuracaoMin,
-      decorrido_ms: entrevista.decorridoMs(emAndamento.iniciado_em),
+      decorrido_ms: 0,
       mock: config.entrevista.mock,
-      retomada: true,
+      retomada: false,
     });
+  } catch (e) {
+    // Log PERMANENTE em PT-BR: antes o motivo real da falha NAO aparecia no
+    // terminal (a tela mostrava um erro generico), o que dificultava o diagnostico.
+    console.error(
+      `[interview/start] falha ao iniciar a entrevista (application_id=${candidato.id}):`,
+      e.stack || e.message,
+    );
+    return res
+      .status(500)
+      .json({ ok: false, erro: 'Não foi possível iniciar a entrevista. Tente novamente.' });
   }
-
-  const vaga = db.obterVaga(candidato.job_id);
-  const roteiro = roteiroDaVaga(vaga);
-  const perguntas = entrevista.montarPerguntas(roteiro);
-
-  const interviewId = db.criarInterview({
-    application_id: candidato.id,
-    perfil: vaga ? vaga.perfil : 'SDR',
-    roteiro_id: vaga ? vaga.roteiro_id : null,
-    status: 'iniciada',
-  });
-  db.atualizarStatusAplicacao(candidato.id, 'em_entrevista');
-
-  // 1a pergunta da Vera = abertura do roteiro (deterministica, orientada a dados).
-  const textoAbertura = perguntas[0].texto;
-  db.criarTurno({ interview_id: interviewId, ordem: 1, autor: 'agente', texto: textoAbertura });
-
-  // Audio: mock = arquivo estatico; real = TTS da abertura.
-  let audioUrl = entrevista.AUDIO_MOCK;
-  if (!config.entrevista.mock) {
-    try {
-      audioUrl = await sintetizarESalvar(textoAbertura, interviewId, 1);
-    } catch (e) {
-      console.error('[interview/start] falha no TTS de abertura:', e.message);
-      return res
-        .status(502)
-        .json({ ok: false, erro: 'Não foi possível iniciar a voz da entrevista. Tente novamente.' });
-    }
-  }
-
-  return res.json({
-    ...entrevista.payloadPergunta({ interviewId, perguntas, indice: 0, audioUrl }),
-    agente: config.agente.nome,
-    max_duracao_min: config.entrevista.maxDuracaoMin,
-    decorrido_ms: 0,
-    mock: config.entrevista.mock,
-    retomada: false,
-  });
 });
 
 // ── POST /api/interview/answer ── recebe o audio e devolve a proxima pergunta
@@ -373,6 +395,17 @@ router.post('/interview/answer', (req, res) => {
     const interviewId = Number(req.body.interview_id);
     const entrevistaRow = db.obterInterview(interviewId);
     if (!entrevistaRow || entrevistaRow.application_id !== candidato.id) {
+      // Log PERMANENTE em PT-BR: distingue "interview_id ausente/invalido" (o front
+      // nao recebeu o id no start) de "pertence a outra candidatura". Antes esse 404
+      // so aparecia na tela e nao deixava rastro no terminal.
+      const motivo = !req.body.interview_id
+        ? 'interview_id ausente no formulario (o /start nao devolveu o id?)'
+        : !Number.isFinite(interviewId)
+          ? `interview_id invalido: ${JSON.stringify(req.body.interview_id)}`
+          : !entrevistaRow
+            ? `entrevista ${interviewId} inexistente no banco`
+            : `entrevista ${interviewId} pertence a outra candidatura (app ${entrevistaRow.application_id} != ${candidato.id})`;
+      console.warn(`[interview/answer] entrevista não encontrada (404): ${motivo}.`);
       return res.status(404).json({ ok: false, erro: 'Entrevista não encontrada.' });
     }
 

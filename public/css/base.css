@@ -302,6 +302,23 @@ html.tema-escuro .vm-funil__etapa--concluida .vm-funil__rotulo{ color:var(--vm-w
 .vm-tel select{ flex:0 0 auto; max-width:42%; }
 .vm-tel input{ flex:1 1 auto; min-width:0; }
 
+/* Campo de moeda: prefixo "R$" visual + texto livre (permite "fixo + comissao"). */
+.vm-moeda{ display:flex; align-items:stretch; }
+.vm-moeda__prefixo{
+  display:flex;
+  align-items:center;
+  padding:0 .7rem;
+  min-height:48px;
+  border:1px solid var(--vm-gray-mid);
+  border-right:0;
+  border-radius:6px 0 0 6px;
+  background:var(--vm-offwhite);
+  color:var(--vm-black);
+  font-family:var(--font-body);
+  font-weight:700;
+}
+.vm-moeda input{ flex:1 1 auto; min-width:0; border-radius:0 6px 6px 0; }
+
 /* Mensagem de erro */
 .vm-form-erro{
   background:var(--vm-white);

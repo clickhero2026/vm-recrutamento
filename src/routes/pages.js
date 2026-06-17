@@ -216,7 +216,11 @@ function formularioAplicacao(vaga) {
       </label>
 
       <label class="vm-campo">Pretensão de remuneração (R$ fixo + variável/comissão)
-        <input type="text" name="pretensao" placeholder="Ex.: R$ 2.500 fixo + comissão (OTE 5k)">
+        <span class="vm-moeda">
+          <span class="vm-moeda__prefixo" aria-hidden="true">R$</span>
+          <input type="text" name="pretensao" data-moeda
+            placeholder="Ex.: 2.500 fixo + comissão (OTE 5k)">
+        </span>
       </label>
 
       <div class="vm-campo">Disponibilidade para início

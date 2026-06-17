@@ -66,6 +66,39 @@
     });
   });
 
+  // Campo de pretensão: prefixo "R$" (visual, no HTML) + agrupamento de milhar nos
+  // NÚMEROS, preservando o texto livre. O campo é texto por design (permite
+  // descrever "fixo + comissão"), então NÃO aplicamos máscara de número único: só
+  // formatamos cada sequência de dígitos com 4+ algarismos (ex.: 45000 → 45.000),
+  // deixando palavras, "+", parênteses e números curtos (ex.: "5k") intactos.
+  function formatarMoedaLivre(valor) {
+    return valor.replace(/\d[\d.]*/g, (trecho) => {
+      const digitos = trecho.replace(/\./g, '');
+      if (digitos.length < 4) return digitos;
+      return digitos.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    });
+  }
+  const campoMoeda = form.querySelector('[data-moeda]');
+  if (campoMoeda) {
+    campoMoeda.addEventListener('input', () => {
+      const antes = campoMoeda.value;
+      const caret = campoMoeda.selectionStart == null ? antes.length : campoMoeda.selectionStart;
+      const digitosAteCaret = (antes.slice(0, caret).match(/\d/g) || []).length;
+      const depois = formatarMoedaLivre(antes);
+      if (depois === antes) return;
+      campoMoeda.value = depois;
+      // Reposiciona o caret após a mesma quantidade de dígitos (os pontos inseridos
+      // não devem "puxar" o cursor para um lugar errado enquanto se digita).
+      let pos = 0;
+      let vistos = 0;
+      while (pos < depois.length && vistos < digitosAteCaret) {
+        if (/\d/.test(depois[pos])) vistos++;
+        pos++;
+      }
+      campoMoeda.setSelectionRange(pos, pos);
+    });
+  }
+
   // Upload de PDF: clique (label nativo) + arrastar/soltar + validacao
   const upload = form.querySelector('[data-upload]');
   const inputArquivo = form.querySelector('input[name="curriculo"]');
