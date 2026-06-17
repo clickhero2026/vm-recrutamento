@@ -38,5 +38,6 @@ module.exports = {
   obterInterview: driver.obterInterview,
   finalizarInterview: driver.finalizarInterview,
   criarTurno: driver.criarTurno,
+  listarTurnos: driver.listarTurnos,
   contarTurnos: driver.contarTurnos,
 };

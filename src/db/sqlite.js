@@ -209,6 +209,13 @@ function criarTurno(turno) {
   return Number(info.lastInsertRowid);
 }
 
+// Lista os turnos da entrevista em ordem (para montar o historico do LLM).
+function listarTurnos(interviewId) {
+  return getDb()
+    .prepare('SELECT autor, texto, ordem FROM interview_turns WHERE interview_id = ? ORDER BY ordem ASC')
+    .all(interviewId);
+}
+
 // Conta turnos da entrevista (opcionalmente por autor).
 function contarTurnos(interviewId, autor) {
   if (autor) {
@@ -244,5 +251,6 @@ module.exports = {
   obterInterview,
   finalizarInterview,
   criarTurno,
+  listarTurnos,
   contarTurnos,
 };

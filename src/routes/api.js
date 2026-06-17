@@ -14,6 +14,11 @@ const db = require('../db');
 const session = require('../lib/session');
 const { extrairTextoPdf } = require('../lib/curriculo');
 const entrevista = require('../lib/entrevista');
+// Adaptadores agnosticos (interface). Os SDKs/chaves so sao tocados quando
+// INTERVIEW_MOCK=false; em mock estes modulos nem sao exercitados.
+const llm = require('../providers/llm');
+const stt = require('../providers/stt');
+const tts = require('../providers/tts');
 
 const router = express.Router();
 
@@ -220,13 +225,37 @@ function roteiroDaVaga(vaga) {
   return vaga && vaga.roteiro_id ? db.obterRoteiro(vaga.roteiro_id) : null;
 }
 
-// URL do audio da fala da Vera. Em mock, arquivo estatico. (Fase 3-real: TTS.)
-function audioDaFala() {
-  return entrevista.AUDIO_MOCK;
+// Sintetiza a fala da Vera (TTS real), salva o MP3 no volume e devolve a URL servida.
+async function sintetizarESalvar(texto, interviewId, ordem) {
+  const { audio } = await entrevista.comTimeout(
+    tts.sintetizar(texto, {}),
+    config.entrevista.timeoutMs,
+    'TTS Google',
+  );
+  const dir = path.join(config.caminhoEntrevistas, String(interviewId));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${ordem}.mp3`), audio);
+  return `/api/interview/audio/${interviewId}/${ordem}.mp3`;
+}
+
+// Audio fixo "nao consegui ouvir": gera via TTS e cacheia UMA vez.
+function caminhoNaoOuvi() {
+  return path.join(config.caminhoEntrevistas, '_cache', 'nao-ouvi.mp3');
+}
+async function garantirNaoOuvi() {
+  const caminho = caminhoNaoOuvi();
+  if (fs.existsSync(caminho)) return;
+  const { audio } = await entrevista.comTimeout(
+    tts.sintetizar(entrevista.FRASE_NAO_OUVI, {}),
+    config.entrevista.timeoutMs,
+    'TTS Google',
+  );
+  fs.mkdirSync(path.dirname(caminho), { recursive: true });
+  fs.writeFileSync(caminho, audio);
 }
 
 // ── POST /api/interview/start ── inicia a entrevista e devolve a 1a pergunta
-router.post('/interview/start', (req, res) => {
+router.post('/interview/start', async (req, res) => {
   const candidato = candidatoApi(req, res);
   if (!candidato) return undefined;
 
@@ -242,16 +271,25 @@ router.post('/interview/start', (req, res) => {
   });
   db.atualizarStatusAplicacao(candidato.id, 'em_entrevista');
 
-  // 1o turno do agente (Vera faz a 1a pergunta)
-  db.criarTurno({ interview_id: interviewId, ordem: 1, autor: 'agente', texto: perguntas[0].texto });
+  // 1a pergunta da Vera = abertura do roteiro (deterministica, orientada a dados).
+  const textoAbertura = perguntas[0].texto;
+  db.criarTurno({ interview_id: interviewId, ordem: 1, autor: 'agente', texto: textoAbertura });
+
+  // Audio: mock = arquivo estatico; real = TTS da abertura.
+  let audioUrl = entrevista.AUDIO_MOCK;
+  if (!config.entrevista.mock) {
+    try {
+      audioUrl = await sintetizarESalvar(textoAbertura, interviewId, 1);
+    } catch (e) {
+      console.error('[interview/start] falha no TTS de abertura:', e.message);
+      return res
+        .status(502)
+        .json({ ok: false, erro: 'Não foi possível iniciar a voz da entrevista. Tente novamente.' });
+    }
+  }
 
   return res.json({
-    ...entrevista.payloadPergunta({
-      interviewId,
-      perguntas,
-      indice: 0,
-      audioUrl: audioDaFala(),
-    }),
+    ...entrevista.payloadPergunta({ interviewId, perguntas, indice: 0, audioUrl }),
     agente: config.agente.nome,
     max_duracao_min: config.entrevista.maxDuracaoMin,
     mock: config.entrevista.mock,
@@ -283,61 +321,157 @@ router.post('/interview/answer', (req, res) => {
     // Quantas perguntas a Vera ja fez -> proxima e o indice seguinte (0-based).
     const proximoIndice = db.contarTurnos(interviewId, 'agente');
 
-    // Salva o turno do candidato. Em mock, nao transcrevemos (STT e Fase 3-real),
-    // mas guardamos o audio no volume persistente para exercitar a persistencia.
+    // Salva o audio do candidato no volume persistente (em mock e real).
     let audioPath = null;
     if (req.file) {
       try {
         const dir = path.join(config.caminhoEntrevistas, String(interviewId));
         fs.mkdirSync(dir, { recursive: true });
-        audioPath = path.join(dir, `${proximoIndice}.webm`);
+        audioPath = path.join(dir, `resp-${proximoIndice}.webm`);
         fs.writeFileSync(audioPath, req.file.buffer);
       } catch (e) {
         console.error('[interview/answer] falha ao salvar audio:', e.message);
         audioPath = null;
       }
     }
-    const textoCandidato = config.entrevista.mock
-      ? '[resposta de áudio recebida — transcrição na Fase 3-real]'
-      : '';
-    db.criarTurno({
-      interview_id: interviewId,
-      ordem: db.contarTurnos(interviewId) + 1,
-      autor: 'candidato',
-      texto: textoCandidato,
-      audio_path: audioPath,
-    });
 
-    // Acabaram as perguntas -> encerra.
-    if (proximoIndice >= perguntas.length) {
-      db.finalizarInterview(interviewId);
-      db.atualizarStatusAplicacao(candidato.id, 'concluido');
-      return res.json({
-        ok: true,
-        encerrar: true,
+    // ───────────────── MODO MOCK (identico a Fase 3C) ─────────────────
+    if (config.entrevista.mock) {
+      db.criarTurno({
         interview_id: interviewId,
-        pergunta: entrevista.FALA_FECHAMENTO,
-        audio_url: audioDaFala(),
-        topicos: entrevista.topicosUnicos(perguntas).map((nome) => ({ nome, estado: 'concluido' })),
+        ordem: db.contarTurnos(interviewId) + 1,
+        autor: 'candidato',
+        texto: '[resposta de áudio recebida — mock]',
+        audio_path: audioPath,
       });
+
+      if (proximoIndice >= perguntas.length) {
+        db.finalizarInterview(interviewId);
+        db.atualizarStatusAplicacao(candidato.id, 'concluido');
+        return res.json({
+          ok: true,
+          encerrar: true,
+          interview_id: interviewId,
+          pergunta: entrevista.FALA_FECHAMENTO,
+          audio_url: entrevista.AUDIO_MOCK,
+          topicos: entrevista.topicosUnicos(perguntas).map((nome) => ({ nome, estado: 'concluido' })),
+        });
+      }
+
+      db.criarTurno({
+        interview_id: interviewId,
+        ordem: db.contarTurnos(interviewId) + 1,
+        autor: 'agente',
+        texto: perguntas[proximoIndice].texto,
+      });
+      return res.json(
+        entrevista.payloadPergunta({
+          interviewId,
+          perguntas,
+          indice: proximoIndice,
+          audioUrl: entrevista.AUDIO_MOCK,
+        }),
+      );
     }
 
-    // Proxima pergunta da Vera.
-    db.criarTurno({
-      interview_id: interviewId,
-      ordem: db.contarTurnos(interviewId) + 1,
-      autor: 'agente',
-      texto: perguntas[proximoIndice].texto,
-    });
+    // ───────────────── MODO REAL (STT -> LLM -> TTS) ─────────────────
+    try {
+      // 1) STT — transcreve o audio recebido (idioma pt).
+      const { texto: transcricao } = await entrevista.comTimeout(
+        stt.transcrever(req.file ? req.file.buffer : Buffer.alloc(0), {
+          idioma: 'pt',
+          mimetype: req.file ? req.file.mimetype : 'audio/webm',
+        }),
+        config.entrevista.timeoutMs,
+        'STT Groq',
+      );
 
-    return res.json(
-      entrevista.payloadPergunta({
-        interviewId,
-        perguntas,
-        indice: proximoIndice,
-        audioUrl: audioDaFala(),
-      }),
-    );
+      // STT vazio -> NAO chama o LLM; pede para repetir (audio fixo cacheado).
+      if (!transcricao || !transcricao.trim()) {
+        await garantirNaoOuvi();
+        return res.json({
+          ok: true,
+          repetir: true,
+          interview_id: interviewId,
+          pergunta: entrevista.FRASE_NAO_OUVI,
+          audio_url: '/api/interview/audio-padrao/nao-ouvi.mp3',
+        });
+      }
+
+      // Registra a resposta transcrita do candidato.
+      db.criarTurno({
+        interview_id: interviewId,
+        ordem: db.contarTurnos(interviewId) + 1,
+        autor: 'candidato',
+        texto: transcricao.trim(),
+        audio_path: audioPath,
+      });
+
+      // 2) LLM — gera a proxima pergunta referenciando a resposta + curriculo.
+      const systemPrompt = entrevista.montarSystemPrompt({
+        roteiro,
+        curriculoTexto: candidato.curriculo_texto,
+        agente: config.agente.nome,
+        maxPerguntas: config.entrevista.maxPerguntas,
+      });
+      const mensagens = entrevista.montarMensagensLLM({
+        systemPrompt,
+        turns: db.listarTurnos(interviewId),
+        recentes: config.entrevista.historicoRecentes,
+      });
+      const resposta = await entrevista.comTimeout(
+        llm.completar(mensagens, { maxTokens: 400 }),
+        config.entrevista.timeoutMs,
+        'LLM DeepSeek',
+      );
+
+      let { texto: falaVera, encerrar } = entrevista.extrairEncerrar(resposta.texto);
+      if (!falaVera) falaVera = 'Pode me contar um pouco mais sobre isso?'; // fallback defensivo
+
+      // Teto de perguntas (rede de seguranca contra entrevista infinita).
+      const agentePosNovo = db.contarTurnos(interviewId, 'agente') + 1;
+      if (agentePosNovo >= config.entrevista.maxPerguntas) encerrar = true;
+
+      // 3) TTS — sintetiza a fala da Vera e salva o MP3.
+      const ordemAgente = db.contarTurnos(interviewId) + 1;
+      const audioUrl = await sintetizarESalvar(falaVera, interviewId, ordemAgente);
+      db.criarTurno({
+        interview_id: interviewId,
+        ordem: ordemAgente,
+        autor: 'agente',
+        texto: falaVera,
+      });
+
+      if (encerrar) {
+        db.finalizarInterview(interviewId);
+        db.atualizarStatusAplicacao(candidato.id, 'concluido');
+        return res.json({
+          ok: true,
+          encerrar: true,
+          interview_id: interviewId,
+          pergunta: falaVera,
+          audio_url: audioUrl,
+          topicos: entrevista.topicosUnicos(perguntas).map((nome) => ({ nome, estado: 'concluido' })),
+        });
+      }
+
+      return res.json(
+        entrevista.montarPayload({
+          interviewId,
+          perguntas,
+          indice: proximoIndice,
+          texto: falaVera,
+          audioUrl,
+          encerrar: false,
+        }),
+      );
+    } catch (e) {
+      console.error('[interview/answer] erro no modo real:', e.message);
+      return res.status(502).json({
+        ok: false,
+        erro: 'Tivemos um problema ao processar sua resposta. Tente novamente em instantes.',
+      });
+    }
   });
 });
 
@@ -355,6 +489,43 @@ router.post('/interview/finish', (req, res) => {
   db.finalizarInterview(interviewId);
   db.atualizarStatusAplicacao(candidato.id, 'concluido');
   return res.json({ ok: true, redirect: '/finalizacao' });
+});
+
+// ── GET /api/interview/audio/:interviewId/:arquivo ── serve o MP3 da fala da Vera (modo real)
+// Protegido: so o candidato dono da entrevista acessa.
+router.get('/interview/audio/:interviewId/:arquivo', (req, res) => {
+  const candidato = candidatoApi(req, res);
+  if (!candidato) return undefined;
+
+  const arquivo = req.params.arquivo;
+  if (!/^\d+\.mp3$/.test(arquivo)) {
+    return res.status(400).json({ ok: false, erro: 'Arquivo inválido.' });
+  }
+  const interviewId = Number(req.params.interviewId);
+  const entrevistaRow = db.obterInterview(interviewId);
+  if (!entrevistaRow || entrevistaRow.application_id !== candidato.id) {
+    return res.status(404).json({ ok: false, erro: 'Áudio não encontrado.' });
+  }
+  const caminho = path.join(config.caminhoEntrevistas, String(interviewId), arquivo);
+  if (!fs.existsSync(caminho)) {
+    return res.status(404).json({ ok: false, erro: 'Áudio não encontrado.' });
+  }
+  res.type('audio/mpeg');
+  return res.sendFile(caminho);
+});
+
+// ── GET /api/interview/audio-padrao/nao-ouvi.mp3 ── audio fixo "nao consegui ouvir"
+router.get('/interview/audio-padrao/nao-ouvi.mp3', async (req, res) => {
+  const candidato = candidatoApi(req, res);
+  if (!candidato) return undefined;
+  try {
+    await garantirNaoOuvi();
+    res.type('audio/mpeg');
+    return res.sendFile(caminhoNaoOuvi());
+  } catch (e) {
+    console.error('[interview/audio-padrao] erro:', e.message);
+    return res.status(502).json({ ok: false, erro: 'Não foi possível gerar o áudio.' });
+  }
 });
 
 module.exports = router;
