@@ -322,33 +322,60 @@ const VM_MIDIA = {
   const tela = document.querySelector('[data-tela-teste-mic]');
   if (!tela) return;
 
+  // Flag de dev: ative com ?vmdev=1 na URL para ver os logs de diagnostico.
+  const VM_DEV = new URLSearchParams(location.search).has('vmdev');
+
   const btnFalar = tela.querySelector('[data-falar]');
   const btnContinuar = tela.querySelector('[data-continuar-mic]');
+  const linkAssim = tela.querySelector('[data-continuar-assim]');
   const barra = tela.querySelector('[data-nivel-mic]');
   const status = tela.querySelector('[data-status-mic]');
+  const nota = tela.querySelector('[data-nota-seguranca]');
   const erro = tela.querySelector('[data-mic-erro]');
 
-  const LIMIAR_RMS = 0.045; // nivel minimo p/ considerar "falando"
-  const TEMPO_ALVO_MS = 1000; // ~1s de som acima do limiar
+  // Deteccao tolerante: piso baixo + acumulo de ~800ms, tolerando pausas.
+  const LIMIAR_RMS = 0.025;
+  const TEMPO_ALVO_MS = 800;
+  const SEGURANCA_MS = 8000; // rede de seguranca: habilita CONTINUAR mesmo sem cruzar o limiar
+
   let stream = null;
   let audioCtx = null;
   let raf = null;
+  let timerSeguranca = null;
   let acumuladoMs = 0;
   let ultimoTs = 0;
+  let testando = false;
   let concluido = false;
+  let ultimoLogTs = 0;
 
   function mostrarErro(msg) {
     erro.textContent = msg;
     erro.hidden = !msg;
   }
 
-  function limpar() {
+  function habilitarContinuar() {
+    btnContinuar.disabled = false;
+  }
+
+  // Para a analise e libera o microfone (AudioContext fechado, tracks paradas).
+  function pararAnalise() {
     if (raf) cancelAnimationFrame(raf);
     raf = null;
+    if (timerSeguranca) {
+      clearTimeout(timerSeguranca);
+      timerSeguranca = null;
+    }
     VM_MIDIA.pararTracks(stream);
     stream = null;
     if (audioCtx && audioCtx.state !== 'closed') audioCtx.close();
     audioCtx = null;
+    testando = false;
+    barra.style.width = '0%';
+  }
+
+  function navegarEntrevista() {
+    pararAnalise();
+    window.location = '/entrevista';
   }
 
   function concluir() {
@@ -356,11 +383,22 @@ const VM_MIDIA = {
     concluido = true;
     status.textContent = '✓ Verificação concluída';
     status.classList.add('vm-status--ok');
-    btnContinuar.disabled = false;
-    btnFalar.textContent = 'Falar de novo';
+    nota.hidden = true;
+    habilitarContinuar();
+    pararAnalise(); // libera o microfone assim que verificamos
+    btnFalar.textContent = 'Testar de novo';
     btnFalar.disabled = false;
-    limpar(); // libera o microfone assim que verificamos
-    barra.style.width = '0%';
+  }
+
+  // Estado final manual (usuario parou o teste sem concluir).
+  function pararManual() {
+    pararAnalise();
+    if (!concluido) {
+      status.textContent = '';
+      status.classList.remove('vm-status--ok');
+    }
+    btnFalar.textContent = concluido ? 'Testar de novo' : 'Falar';
+    btnFalar.disabled = false;
   }
 
   async function comecar() {
@@ -371,12 +409,20 @@ const VM_MIDIA = {
     }
     acumuladoMs = 0;
     concluido = false;
-    btnFalar.disabled = true;
-    btnFalar.textContent = 'Ouvindo...';
-    status.textContent = '';
+    testando = true;
+    btnFalar.textContent = 'Parar';
+    status.textContent = 'Ouvindo...';
     status.classList.remove('vm-status--ok');
+    nota.hidden = true;
+
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Se o usuario parou durante o await, libera e nao inicia a analise.
+      if (!testando) {
+        VM_MIDIA.pararTracks(s);
+        return;
+      }
+      stream = s;
       const AudioCtx = window.AudioContext || window.webkitAudioContext; // iOS
       audioCtx = new AudioCtx();
       if (audioCtx.state === 'suspended') await audioCtx.resume(); // iOS exige gesto
@@ -386,6 +432,16 @@ const VM_MIDIA = {
       fonte.connect(analisador);
       const dados = new Uint8Array(analisador.fftSize);
       ultimoTs = performance.now();
+
+      // Rede de seguranca: com o microfone concedido, nunca prender o usuario.
+      timerSeguranca = setTimeout(() => {
+        if (!concluido && stream) {
+          habilitarContinuar();
+          nota.hidden = false;
+          nota.textContent = 'Se você se ouviu no medidor, pode continuar.';
+          if (VM_DEV) console.log('[mic] rede de seguranca: CONTINUAR habilitado apos 8s');
+        }
+      }, SEGURANCA_MS);
 
       function loop(ts) {
         const dt = ts - ultimoTs;
@@ -401,7 +457,15 @@ const VM_MIDIA = {
         barra.style.width = `${Math.round(nivel * 100)}%`;
 
         if (rms > LIMIAR_RMS) acumuladoMs += dt;
-        else acumuladoMs = Math.max(0, acumuladoMs - dt * 0.5); // decaimento suave
+        else acumuladoMs = Math.max(0, acumuladoMs - dt * 0.4); // decaimento suave, tolera pausas
+
+        // Log de diagnostico (atras do flag de dev), throttled ~4x/s.
+        if (VM_DEV && ts - ultimoLogTs > 250) {
+          ultimoLogTs = ts;
+          console.log(
+            `[mic] rms=${rms.toFixed(4)} limiar=${LIMIAR_RMS} acumulado=${Math.round(acumuladoMs)}ms`,
+          );
+        }
 
         if (acumuladoMs >= TEMPO_ALVO_MS) {
           concluir();
@@ -412,22 +476,31 @@ const VM_MIDIA = {
       raf = requestAnimationFrame(loop);
     } catch (err) {
       mostrarErro(VM_MIDIA.mensagemErro(err, 'microfone'));
-      btnFalar.disabled = false;
+      pararAnalise();
       btnFalar.textContent = 'Falar';
-      limpar();
+      btnFalar.disabled = false;
     }
   }
 
-  btnFalar.addEventListener('click', comecar);
-  btnContinuar.addEventListener('click', () => {
-    limpar();
-    window.location = '/entrevista';
+  // FALAR e um toggle real: inicia / para o teste manualmente.
+  btnFalar.addEventListener('click', () => {
+    if (testando) pararManual();
+    else comecar();
+  });
+
+  // CONTINUAR (so habilita apos concluir ou apos a rede de seguranca).
+  btnContinuar.addEventListener('click', navegarEntrevista);
+
+  // "Continuar mesmo assim": sempre disponivel (microfone foi concedido na Tela 8).
+  linkAssim.addEventListener('click', (e) => {
+    e.preventDefault();
+    navegarEntrevista();
   });
 
   // Libera o microfone ao sair da tela.
-  window.addEventListener('pagehide', limpar);
+  window.addEventListener('pagehide', pararAnalise);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') limpar();
+    if (document.visibilityState === 'hidden') pararAnalise();
   });
 })();
 

@@ -488,6 +488,9 @@ router.get('/teste-microfone', exigirCandidato, (req, res) => {
         <button type="button" class="vm-btn vm-btn--secundario" data-falar>Falar</button>
         <button type="button" class="vm-btn vm-btn--primario" data-continuar-mic disabled>Continuar</button>
       </div>
+
+      <p class="vm-nota-seguranca" data-nota-seguranca aria-live="polite" hidden></p>
+      <a class="vm-link-discreto" href="/entrevista" data-continuar-assim>Continuar mesmo assim</a>
     </section>`;
 
   res.send(pagina({ titulo: 'Teste seu microfone', tema: 'escuro', etapa: 3, conteudo }));

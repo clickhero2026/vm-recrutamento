@@ -467,6 +467,14 @@ html.tema-escuro .vm-aviso{ background:color-mix(in srgb, var(--vm-white) 6%, tr
 }
 .vm-status{ min-height:1.4rem; font-weight:600; }
 .vm-status--ok{ color:var(--vm-orange); }
+.vm-nota-seguranca{ font-size:.85rem; color:var(--vm-gray-mid); }
+.vm-link-discreto{
+  font-size:.85rem;
+  color:var(--vm-gray-mid);
+  text-decoration:underline;
+  text-underline-offset:3px;
+}
+.vm-link-discreto:hover{ color:var(--vm-orange); }
 
 /* ── Desktop: respiro maior ── */
 @media (min-width:768px){
