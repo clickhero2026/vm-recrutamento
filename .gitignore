@@ -16,6 +16,16 @@
 .env
 .env.local
 
+# Credenciais Google Cloud (TTS) - NUNCA commitar.
+# Prefira GOOGLE_TTS_CREDENTIALS_JSON (env) ou aponte o caminho p/ fora do repo / dentro de /data.
+*service-account*.json
+*gserviceaccount*.json
+google-credentials*.json
+gcp-credentials*.json
+
+# Audios gerados (smoke de TTS, etc.)
+*.mp3
+
 # Logs e temporarios
 *.log
 npm-debug.log*

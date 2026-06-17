@@ -11,9 +11,11 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "migrate": "node src/db/migrate.js",
-    "seed": "node src/db/seed.js"
+    "seed": "node src/db/seed.js",
+    "smoke:providers": "node src/scripts/smoke.js"
   },
   "dependencies": {
+    "@google-cloud/text-to-speech": "^5.0.0",
     "better-sqlite3": "^11.8.1",
     "cookie-parser": "^1.4.7",
     "dotenv": "^16.4.7",

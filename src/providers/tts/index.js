@@ -3,12 +3,13 @@
 // Interface de TTS (voz do agente Vera). Agnostica; selecao via env (TTS_PROVIDER).
 //
 // Contrato:
-//   sintetizar(texto, voz) -> Promise<{ audio, mime }>
-//     texto: string (a fala do agente)
-//     voz:   ex. 'pt-BR-Neural2-A' (default vem de config.provedores.tts.voz)
-//     audio: Buffer
+//   sintetizar(texto, opcoes) -> Promise<{ audio, mime }>
+//     texto:  string (a fala do agente)
+//     opcoes: { voz, idioma } (defaults vem do bloco do provedor no config)
+//     audio:  Buffer (MP3 no Google)
 //
-// Fase 0: roteia para o stub correspondente. (Sem ElevenLabs na v1.)
+// Sem ElevenLabs na v1 (baixo custo). Os adaptadores reais so sao chamados
+// quando INTERVIEW_MOCK=false.
 
 const { config } = require('../../config');
 
@@ -28,8 +29,8 @@ function selecionar() {
   return carregar();
 }
 
-async function sintetizar(texto, voz = config.provedores.tts.voz) {
-  return selecionar().sintetizar(texto, voz);
+async function sintetizar(texto, opcoes = {}) {
+  return selecionar().sintetizar(texto, opcoes);
 }
 
 module.exports = { sintetizar, selecionar };

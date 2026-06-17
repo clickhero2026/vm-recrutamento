@@ -60,37 +60,42 @@ const config = {
     maxDuracaoMin: num(process.env.MAX_DURACAO_MIN, 20),
   },
 
-  // Selecao de provedores (os adaptadores reais chegam na Fase 3/4).
+  // Selecao de provedores (trocaveis por env). Cada adaptador le o seu bloco.
+  // Os adaptadores reais so sao chamados quando INTERVIEW_MOCK=false.
   provedores: {
     llm: {
-      nome: process.env.LLM_PROVIDER || 'openrouter',
-      modelo: process.env.LLM_MODEL || '',
-      chaves: {
-        openrouter: process.env.OPENROUTER_API_KEY || '',
-        deepseek: process.env.DEEPSEEK_API_KEY || '',
-        anthropic: process.env.ANTHROPIC_API_KEY || '',
+      nome: process.env.LLM_PROVIDER || 'deepseek',
+      modelo: process.env.LLM_MODEL || '', // override global opcional
+      deepseek: {
+        apiKey: process.env.DEEPSEEK_API_KEY || '',
+        baseUrl: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+        modelo: process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash',
       },
+      openrouter: { apiKey: process.env.OPENROUTER_API_KEY || '' },
+      anthropic: { apiKey: process.env.ANTHROPIC_API_KEY || '' },
     },
     stt: {
       nome: process.env.STT_PROVIDER || 'groq',
-      chaves: {
-        groq: process.env.GROQ_API_KEY || '',
-        openai: process.env.OPENAI_API_KEY || '',
+      groq: {
+        apiKey: process.env.GROQ_API_KEY || '',
+        modelo: process.env.GROQ_STT_MODEL || 'whisper-large-v3',
       },
+      openai: { apiKey: process.env.OPENAI_API_KEY || '' },
     },
     tts: {
       nome: process.env.TTS_PROVIDER || 'google',
-      voz: process.env.TTS_VOICE || '',
-      chaves: {
-        google: process.env.GOOGLE_APPLICATION_CREDENTIALS || '',
-        openai: process.env.OPENAI_API_KEY || '',
+      google: {
+        voz: process.env.GOOGLE_TTS_VOICE || 'pt-BR-Wavenet-A',
+        idioma: process.env.GOOGLE_TTS_LANGUAGE || 'pt-BR',
+        // Credencial em duas formas (o adaptador tenta nesta ordem):
+        credentialsJson: process.env.GOOGLE_TTS_CREDENTIALS_JSON || '', // JSON inteiro numa env
+        credentialsPath: process.env.GOOGLE_APPLICATION_CREDENTIALS || '', // caminho do .json
       },
+      openai: { apiKey: process.env.OPENAI_API_KEY || '' },
     },
     email: {
       nome: 'resend',
-      chaves: {
-        resend: process.env.RESEND_API_KEY || '',
-      },
+      resend: { apiKey: process.env.RESEND_API_KEY || '' },
     },
   },
 };

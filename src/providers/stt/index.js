@@ -27,8 +27,9 @@ function selecionar() {
   return carregar();
 }
 
-async function transcrever(audio, idioma = 'pt-BR') {
-  return selecionar().transcrever(audio, idioma);
+// opcoes: { idioma='pt', mimetype }
+async function transcrever(audio, opcoes = {}) {
+  return selecionar().transcrever(audio, opcoes);
 }
 
 module.exports = { transcrever, selecionar };
