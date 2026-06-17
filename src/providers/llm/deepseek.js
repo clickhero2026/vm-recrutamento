@@ -24,6 +24,11 @@ async function completar(mensagens, opcoes = {}) {
     messages,
     temperature: opcoes.temperatura != null ? opcoes.temperatura : 0.7,
     max_tokens: opcoes.maxTokens != null ? opcoes.maxTokens : 1024,
+    // deepseek-v4-flash tem "thinking mode" ligado por padrao, o que pode deixar
+    // message.content vazio (o texto sai em reasoning_content). Para o motor de
+    // entrevista queremos a resposta direta — desabilitamos o thinking.
+    // Doc: https://api-docs.deepseek.com/guides/thinking_mode
+    thinking: { type: 'disabled' },
   };
 
   let resp;
@@ -46,9 +51,24 @@ async function completar(mensagens, opcoes = {}) {
   }
 
   const dados = await resp.json();
-  const texto = dados.choices && dados.choices[0] && dados.choices[0].message
-    ? dados.choices[0].message.content || ''
-    : '';
+  const mensagem =
+    dados.choices && dados.choices[0] && dados.choices[0].message
+      ? dados.choices[0].message
+      : {};
+
+  let texto = mensagem.content || '';
+
+  // Rede de seguranca: com thinking desabilitado isso nao deveria ocorrer, mas
+  // se o content vier vazio e houver reasoning_content, usamos como fallback
+  // (evita silencio total caso a API mude de comportamento no futuro).
+  if (!texto && mensagem.reasoning_content) {
+    console.warn(
+      '[llm/deepseek] content veio vazio; usando reasoning_content como fallback ' +
+        '(verifique se o thinking mode foi mesmo desabilitado).',
+    );
+    texto = mensagem.reasoning_content;
+  }
+
   return { texto, modelo, uso: dados.usage || null };
 }
 
