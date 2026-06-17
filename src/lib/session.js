@@ -54,6 +54,20 @@ function loadCandidato(req) {
   return aplicacao || null;
 }
 
+// Middleware de gate: protege etapas que exigem candidato identificado.
+// Continuidade sem reescrever dados: com vm_token valido, a Identificacao NUNCA
+// aparece; ela so surge para quem volta depois (sem cookie).
+function exigirCandidato(req, res, next) {
+  const candidato = loadCandidato(req);
+  if (candidato) {
+    req.candidato = candidato; // anexa para as rotas reusarem
+    return next();
+  }
+  // Guarda o destino pretendido para retomar depois da identificacao.
+  const retomar = encodeURIComponent(req.originalUrl);
+  return res.redirect(`/identificacao?retomar=${retomar}`);
+}
+
 module.exports = {
   COOKIE_TOKEN,
   gerarToken,
@@ -61,4 +75,5 @@ module.exports = {
   getToken,
   limparToken,
   loadCandidato,
+  exigirCandidato,
 };

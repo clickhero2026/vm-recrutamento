@@ -16,19 +16,8 @@ function botao(href, texto, variante = 'primario') {
   return `<a class="vm-btn vm-btn--${variante}" href="${href}">${escapeHtml(texto)}</a>`;
 }
 
-// Middleware de gate de sessao: protege etapas que exigem candidato identificado.
-// Continuidade sem reescrever dados: com vm_token valido, a Identificacao NUNCA
-// aparece; ela so surge para quem volta depois (sem cookie).
-function exigirCandidato(req, res, next) {
-  const candidato = session.loadCandidato(req);
-  if (candidato) {
-    req.candidato = candidato; // anexa para as rotas reusarem
-    return next();
-  }
-  // Guarda o destino pretendido para retomar depois da identificacao.
-  const retomar = encodeURIComponent(req.originalUrl);
-  return res.redirect(`/identificacao?retomar=${retomar}`);
-}
+// Gate de sessao: o middleware vive em lib/session.js (session.exigirCandidato).
+const { exigirCandidato } = session;
 
 // Bloco de placeholder padrao para as telas ainda nao implementadas.
 function placeholder({ kicker, titulo, descricao, acao }) {
@@ -409,43 +398,54 @@ router.get('/instrucoes', exigirCandidato, (req, res) => {
   );
 });
 
-// ── Tela 6: Permissao de camera ──
-router.get('/permissao-camera', (req, res) => {
-  res.send(
-    pagina({
-      titulo: 'Permissao de camera',
-      tema: 'escuro',
-      etapa: 3,
-      conteudo: placeholder({
-        kicker: 'Camera (opcional)',
-        titulo: 'Permissao de camera',
-        descricao:
-          'A camera e opcional (so presenca, nao grava video) e pode ser pulada no celular. getUserMedia chega na Fase 2.',
-        acao: botao('/teste-camera', 'Permitir e continuar'),
-      }),
-    }),
-  );
+// ── Tela 6: Permissao de camera (opcional, so presenca — nao grava video) ──
+router.get('/permissao-camera', exigirCandidato, (req, res) => {
+  const conteudo = `
+    <section class="vm-hero vm-hero--centro">
+      <p class="vm-kicker">Câmera (opcional)</p>
+      <h1 class="vm-title">Permissão de câmera</h1>
+      <p class="vm-lead">A câmera é opcional e serve apenas para confirmar sua presença. Não gravamos vídeo.</p>
+
+      <p class="vm-form-erro" data-cam-erro hidden role="alert"></p>
+
+      <div class="vm-acoes">
+        <button type="button" class="vm-btn vm-btn--primario" data-permitir-camera>Permitir câmera</button>
+        <a class="vm-btn vm-btn--secundario" href="/permissao-microfone" data-pular>Pular câmera</a>
+      </div>
+
+      <p class="vm-rodape-nota">
+        No iPhone (Safari), a câmera exige conexão segura (HTTPS) e a permissão é solicitada ao tocar no botão.
+      </p>
+    </section>`;
+
+  res.send(pagina({ titulo: 'Permissão de câmera', tema: 'escuro', etapa: 3, conteudo }));
 });
 
-// ── Tela 7: Teste de camera ──
-router.get('/teste-camera', (req, res) => {
-  res.send(
-    pagina({
-      titulo: 'Teste de camera',
-      tema: 'escuro',
-      etapa: 3,
-      conteudo: placeholder({
-        kicker: 'Camera',
-        titulo: 'Teste de camera',
-        descricao: 'Preview da camera e confirmacao. Funcionalidade chega na Fase 2.',
-        acao: botao('/permissao-microfone', 'Continuar'),
-      }),
-    }),
-  );
+// ── Tela 7: Teste de camera (preview ao vivo, sem gravar) ──
+router.get('/teste-camera', exigirCandidato, (req, res) => {
+  const conteudo = `
+    <section class="vm-hero vm-hero--centro" data-tela-teste-camera>
+      <p class="vm-kicker">Câmera (opcional)</p>
+      <h1 class="vm-title">Confira sua câmera</h1>
+
+      <div class="vm-video-wrap">
+        <video data-preview-camera autoplay muted playsinline></video>
+      </div>
+
+      <p class="vm-lead">Está tudo certo? Você aparece na imagem?</p>
+      <p class="vm-form-erro" data-cam-erro hidden role="alert"></p>
+
+      <div class="vm-acoes">
+        <a class="vm-btn vm-btn--primario" href="/permissao-microfone" data-continuar>Continuar</a>
+        <a class="vm-btn vm-btn--secundario" href="/permissao-microfone" data-pular>Pular câmera</a>
+      </div>
+    </section>`;
+
+  res.send(pagina({ titulo: 'Confira sua câmera', tema: 'escuro', etapa: 3, conteudo }));
 });
 
 // ── Tela 8: Permissao de microfone ──
-router.get('/permissao-microfone', (req, res) => {
+router.get('/permissao-microfone', exigirCandidato, (req, res) => {
   res.send(
     pagina({
       titulo: 'Permissao de microfone',
@@ -462,7 +462,7 @@ router.get('/permissao-microfone', (req, res) => {
 });
 
 // ── Tela 9: Teste de microfone ──
-router.get('/teste-microfone', (req, res) => {
+router.get('/teste-microfone', exigirCandidato, (req, res) => {
   res.send(
     pagina({
       titulo: 'Teste de microfone',

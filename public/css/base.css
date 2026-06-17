@@ -422,6 +422,23 @@ html.tema-escuro .vm-aviso{ background:color-mix(in srgb, var(--vm-white) 6%, tr
   display:grid; place-items:center;
 }
 
+/* ── Preview de camera (Tela 7) ── */
+.vm-video-wrap{
+  width:100%;
+  max-width:420px;
+  aspect-ratio:4 / 3;
+  margin:0 auto;
+  border-radius:12px;
+  overflow:hidden;
+  border:2px solid var(--vm-orange);
+  background:var(--vm-black);
+}
+.vm-video-wrap video{
+  width:100%; height:100%;
+  object-fit:cover;
+  transform:scaleX(-1); /* espelha como selfie (mais natural) */
+}
+
 /* ── Desktop: respiro maior ── */
 @media (min-width:768px){
   .vm-container{ padding-top:3rem; }

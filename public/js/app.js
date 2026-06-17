@@ -179,6 +179,108 @@
   });
 })();
 
+// ── Utilitarios de midia (Fase 2): mensagens de erro PT-BR + parar tracks ──
+const VM_MIDIA = {
+  mensagemErro(err, tipo) {
+    const dispositivo = tipo === 'camera' ? 'câmera' : 'microfone';
+    const nome = err && err.name ? err.name : '';
+    if (nome === 'NotAllowedError' || nome === 'SecurityError') {
+      return (
+        `Permissão de ${dispositivo} negada. Para reativar: toque no ícone de cadeado/` +
+        `${dispositivo} na barra de endereço do navegador e permita o acesso (ou ajuste nas ` +
+        `configurações do navegador/sistema). Você também pode continuar sem câmera.`
+      );
+    }
+    if (nome === 'NotFoundError' || nome === 'DevicesNotFoundError') {
+      return `Nenhuma ${dispositivo} encontrada. Você pode continuar sem câmera.`;
+    }
+    if (nome === 'NotReadableError' || nome === 'TrackStartError') {
+      return `Não foi possível acessar a ${dispositivo} (pode estar em uso por outro app).`;
+    }
+    return `Não foi possível acessar a ${dispositivo}. Verifique as permissões e tente novamente.`;
+  },
+  pararTracks(stream) {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+  },
+  suportado() {
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  },
+};
+
+// ── Tela 6: Permissao de camera ──
+(function () {
+  const btn = document.querySelector('[data-permitir-camera]');
+  if (!btn) return;
+  const erro = document.querySelector('[data-cam-erro]');
+
+  function mostrarErro(msg) {
+    erro.textContent = msg;
+    erro.hidden = !msg;
+  }
+
+  btn.addEventListener('click', async () => {
+    mostrarErro('');
+    if (!VM_MIDIA.suportado()) {
+      mostrarErro('Seu navegador não suporta acesso à câmera. Você pode continuar sem câmera.');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Solicitando...';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      // Nao precisamos manter o stream aqui: paramos as tracks e seguimos.
+      VM_MIDIA.pararTracks(stream);
+      window.location = '/teste-camera';
+    } catch (err) {
+      mostrarErro(VM_MIDIA.mensagemErro(err, 'camera'));
+      btn.disabled = false;
+      btn.textContent = 'Permitir câmera';
+    }
+  });
+})();
+
+// ── Tela 7: Teste de camera (preview ao vivo) ──
+(function () {
+  const tela = document.querySelector('[data-tela-teste-camera]');
+  if (!tela) return;
+  const video = tela.querySelector('[data-preview-camera]');
+  const erro = tela.querySelector('[data-cam-erro]');
+  let streamAtual = null;
+
+  function mostrarErro(msg) {
+    erro.textContent = msg;
+    erro.hidden = !msg;
+  }
+  function pararPreview() {
+    VM_MIDIA.pararTracks(streamAtual);
+    streamAtual = null;
+  }
+
+  async function iniciarPreview() {
+    if (!VM_MIDIA.suportado()) {
+      mostrarErro('Seu navegador não suporta acesso à câmera. Você pode continuar sem câmera.');
+      return;
+    }
+    try {
+      streamAtual = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = streamAtual;
+    } catch (err) {
+      mostrarErro(VM_MIDIA.mensagemErro(err, 'camera'));
+    }
+  }
+
+  // Ao sair/continuar/pular: para as tracks (apaga a luz da webcam).
+  tela.querySelectorAll('[data-continuar], [data-pular]').forEach((link) => {
+    link.addEventListener('click', () => pararPreview());
+  });
+  window.addEventListener('pagehide', pararPreview);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') pararPreview();
+  });
+
+  iniciarPreview();
+})();
+
 // ── Tela de Identificacao ──
 (function () {
   const form = document.getElementById('form-identificacao');
