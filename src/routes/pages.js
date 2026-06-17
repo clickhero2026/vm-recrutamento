@@ -519,6 +519,7 @@ router.get('/entrevista', exigirCandidato, (req, res) => {
 
       <div class="vm-entrevista__controles">
         <button type="button" class="vm-btn vm-btn--primario vm-ptt" data-ptt hidden>Toque para falar</button>
+        <button type="button" class="vm-btn vm-btn--primario" data-retry hidden>Tentar de novo</button>
         <button type="button" class="vm-btn vm-btn--secundario" data-repetir hidden>Repetir pergunta</button>
       </div>
 

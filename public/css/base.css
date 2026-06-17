@@ -501,6 +501,9 @@ html.tema-escuro .vm-aviso{ background:color-mix(in srgb, var(--vm-white) 6%, tr
 .vm-chip--atual{ border-color:var(--vm-orange); color:var(--vm-orange); font-weight:700; }
 .vm-chip--futuro{ border-color:var(--vm-gray-mid); color:var(--vm-gray-mid); }
 .vm-timer{ font-family:var(--font-mono); font-size:1rem; color:var(--vm-orange); white-space:nowrap; }
+/* Tempo esgotado (atingiu MAX_DURACAO_MIN): a entrevista encerra no proximo turno. */
+.vm-timer--esgotado{ color:var(--vm-orange-dark); font-weight:700; animation:vm-timer-pisca 1.1s ease-in-out infinite; }
+@keyframes vm-timer-pisca{ 0%,100%{ opacity:1; } 50%{ opacity:.45; } }
 
 .vm-vera-estado{ min-height:1.2rem; color:var(--vm-gray-mid); font-size:.9rem; text-align:center; }
 .vm-pergunta{ font-size:1.3rem; line-height:1.4; text-align:center; max-width:42ch; }

@@ -254,10 +254,69 @@ async function garantirNaoOuvi() {
   fs.writeFileSync(caminho, audio);
 }
 
+// Reconstroi o payload do ESTADO ATUAL de uma entrevista a partir dos turnos ja
+// salvos — sem chamar nenhum provedor (STT/LLM/TTS) e sem criar turnos.
+// Usado por: (1) retomada ao recarregar a pagina; (2) idempotencia (retry com o
+// mesmo tentativa_id devolve o mesmo estado, sem duplicar turnos).
+function payloadEstadoAtual(interviewRow) {
+  const interviewId = interviewRow.id;
+  const roteiro = interviewRow.roteiro_id ? db.obterRoteiro(interviewRow.roteiro_id) : null;
+  const perguntas = entrevista.montarPerguntas(roteiro);
+
+  const turns = db.listarTurnos(interviewId); // [{ autor, texto, ordem }]
+  const agentes = turns.filter((t) => t.autor === 'agente');
+  const ultimoAgente = agentes[agentes.length - 1] || null;
+  // Posicao (0-based) da ultima pergunta feita pela Vera -> chips/progresso.
+  const indice = Math.max(0, agentes.length - 1);
+
+  // Audio: mock = arquivo estatico; real = MP3 ja salvo na ordem do turno do agente.
+  let audioUrl = entrevista.AUDIO_MOCK;
+  if (!config.entrevista.mock && ultimoAgente) {
+    audioUrl = `/api/interview/audio/${interviewId}/${ultimoAgente.ordem}.mp3`;
+  }
+
+  const texto = ultimoAgente ? ultimoAgente.texto : '';
+
+  if (interviewRow.status === 'concluido') {
+    return {
+      ok: true,
+      encerrar: true,
+      interview_id: interviewId,
+      pergunta: texto || entrevista.FALA_FECHAMENTO,
+      audio_url: audioUrl,
+      topicos: entrevista.topicosUnicos(perguntas).map((nome) => ({ nome, estado: 'concluido' })),
+    };
+  }
+
+  return entrevista.montarPayload({
+    interviewId,
+    perguntas,
+    indice,
+    texto,
+    audioUrl,
+    encerrar: false,
+  });
+}
+
 // ── POST /api/interview/start ── inicia a entrevista e devolve a 1a pergunta
 router.post('/interview/start', async (req, res) => {
   const candidato = candidatoApi(req, res);
   if (!candidato) return undefined;
+
+  // RETOMADA: se ja existe uma entrevista em andamento para esta application,
+  // devolve o estado atual (mesma pergunta, mesmos turnos) sem criar entrevista
+  // nem turno novo e sem tocar em nenhum provedor.
+  const emAndamento = db.obterInterviewEmAndamentoPorAplicacao(candidato.id);
+  if (emAndamento) {
+    return res.json({
+      ...payloadEstadoAtual(emAndamento),
+      agente: config.agente.nome,
+      max_duracao_min: config.entrevista.maxDuracaoMin,
+      decorrido_ms: entrevista.decorridoMs(emAndamento.iniciado_em),
+      mock: config.entrevista.mock,
+      retomada: true,
+    });
+  }
 
   const vaga = db.obterVaga(candidato.job_id);
   const roteiro = roteiroDaVaga(vaga);
@@ -292,7 +351,9 @@ router.post('/interview/start', async (req, res) => {
     ...entrevista.payloadPergunta({ interviewId, perguntas, indice: 0, audioUrl }),
     agente: config.agente.nome,
     max_duracao_min: config.entrevista.maxDuracaoMin,
+    decorrido_ms: 0,
     mock: config.entrevista.mock,
+    retomada: false,
   });
 });
 
@@ -315,11 +376,36 @@ router.post('/interview/answer', (req, res) => {
       return res.status(404).json({ ok: false, erro: 'Entrevista não encontrada.' });
     }
 
+    // IDEMPOTENCIA: o front manda um tentativa_id estavel por resposta (reusado no
+    // retry). Se ja processamos esse id, devolvemos o MESMO estado sem reprocessar
+    // — sem novo turno, sem novo provedor. Evita turnos duplicados quando a 1a
+    // tentativa chegou ao servidor mas a resposta se perdeu na rede.
+    const tentativaId = String(req.body.tentativa_id || '').trim();
+    if (tentativaId && entrevistaRow.ultimo_resp_id === tentativaId) {
+      return res.json(payloadEstadoAtual(entrevistaRow));
+    }
+
+    // Entrevista ja encerrada: nao reprocessa; devolve o estado final.
+    if (entrevistaRow.status === 'concluido') {
+      return res.json(payloadEstadoAtual(entrevistaRow));
+    }
+
+    // Forca avancar mesmo sem ouvir (front pede na 3a tentativa, apos 2 repeticoes).
+    const forcarAvancar = String(req.body.forcar_avancar || '') === '1';
+
     const roteiro = entrevistaRow.roteiro_id ? db.obterRoteiro(entrevistaRow.roteiro_id) : null;
     const perguntas = entrevista.montarPerguntas(roteiro);
 
     // Quantas perguntas a Vera ja fez -> proxima e o indice seguinte (0-based).
     const proximoIndice = db.contarTurnos(interviewId, 'agente');
+
+    // Teto de tempo real: se ja estourou MAX_DURACAO_MIN, esta resposta encerra
+    // graciosamente. Teto de perguntas (MAX_PERGUNTAS) e o segundo limite; o que
+    // vier primeiro encerra.
+    const tempoEstourou = entrevista.excedeuDuracao(
+      entrevistaRow.iniciado_em,
+      config.entrevista.maxDuracaoMin,
+    );
 
     // Salva o audio do candidato no volume persistente (em mock e real).
     let audioPath = null;
@@ -335,8 +421,23 @@ router.post('/interview/answer', (req, res) => {
       }
     }
 
-    // ───────────────── MODO MOCK (identico a Fase 3C) ─────────────────
+    // ───────────────── MODO MOCK (custo zero) ─────────────────
     if (config.entrevista.mock) {
+      // Teste de "nao consegui ouvir" (SO em mock; gatilho via flag de teste).
+      // Sem forcar: pede repeticao, NAO cria turno, NAO avanca. Audio = mock.
+      const testeRepetir = String(req.body.teste_repetir || '') === '1';
+      if (testeRepetir && !forcarAvancar) {
+        return res.json({
+          ok: true,
+          repetir: true,
+          interview_id: interviewId,
+          pergunta: entrevista.FRASE_NAO_OUVI,
+          audio_url: entrevista.AUDIO_MOCK,
+        });
+      }
+      // Na 3a tentativa (forcar), a Vera segue com uma fala de transicao.
+      const prefixoTransicao = testeRepetir && forcarAvancar ? `${entrevista.FALA_TRANSICAO} ` : '';
+
       db.criarTurno({
         interview_id: interviewId,
         ordem: db.contarTurnos(interviewId) + 1,
@@ -345,14 +446,28 @@ router.post('/interview/answer', (req, res) => {
         audio_path: audioPath,
       });
 
-      if (proximoIndice >= perguntas.length) {
+      // Encerramento: perguntas esgotadas, OU teto de tempo, OU teto de perguntas.
+      const encerrar =
+        proximoIndice >= perguntas.length ||
+        tempoEstourou ||
+        proximoIndice >= config.entrevista.maxPerguntas;
+
+      if (encerrar) {
+        const falaFechamento = `${prefixoTransicao}${entrevista.FALA_FECHAMENTO}`;
+        db.criarTurno({
+          interview_id: interviewId,
+          ordem: db.contarTurnos(interviewId) + 1,
+          autor: 'agente',
+          texto: falaFechamento,
+        });
         db.finalizarInterview(interviewId);
         db.atualizarStatusAplicacao(candidato.id, 'concluido');
+        if (tentativaId) db.definirUltimoRespId(interviewId, tentativaId);
         return res.json({
           ok: true,
           encerrar: true,
           interview_id: interviewId,
-          pergunta: entrevista.FALA_FECHAMENTO,
+          pergunta: falaFechamento,
           audio_url: entrevista.AUDIO_MOCK,
           topicos: entrevista.topicosUnicos(perguntas).map((nome) => ({ nome, estado: 'concluido' })),
         });
@@ -362,14 +477,17 @@ router.post('/interview/answer', (req, res) => {
         interview_id: interviewId,
         ordem: db.contarTurnos(interviewId) + 1,
         autor: 'agente',
-        texto: perguntas[proximoIndice].texto,
+        texto: `${prefixoTransicao}${perguntas[proximoIndice].texto}`,
       });
+      if (tentativaId) db.definirUltimoRespId(interviewId, tentativaId);
       return res.json(
-        entrevista.payloadPergunta({
+        entrevista.montarPayload({
           interviewId,
           perguntas,
           indice: proximoIndice,
+          texto: `${prefixoTransicao}${perguntas[proximoIndice].texto}`,
           audioUrl: entrevista.AUDIO_MOCK,
+          encerrar: false,
         }),
       );
     }
@@ -386,8 +504,11 @@ router.post('/interview/answer', (req, res) => {
         'STT Groq',
       );
 
-      // STT vazio -> NAO chama o LLM; pede para repetir (audio fixo cacheado).
-      if (!transcricao || !transcricao.trim()) {
+      // STT vazio -> NAO chama o LLM. Sem forcar: pede para repetir (audio fixo
+      // cacheado). Com forcar (3a tentativa apos 2 repeticoes): segue mesmo assim
+      // com uma fala de transicao, registrando a resposta como inaudivel.
+      const semFala = !transcricao || !transcricao.trim();
+      if (semFala && !forcarAvancar) {
         await garantirNaoOuvi();
         return res.json({
           ok: true,
@@ -397,15 +518,41 @@ router.post('/interview/answer', (req, res) => {
           audio_url: '/api/interview/audio-padrao/nao-ouvi.mp3',
         });
       }
+      const prefixoTransicao = semFala && forcarAvancar ? `${entrevista.FALA_TRANSICAO} ` : '';
 
-      // Registra a resposta transcrita do candidato.
+      // Registra a resposta do candidato (ou marca como inaudivel ao forcar).
       db.criarTurno({
         interview_id: interviewId,
         ordem: db.contarTurnos(interviewId) + 1,
         autor: 'candidato',
-        texto: transcricao.trim(),
+        texto: semFala ? '[resposta inaudível]' : transcricao.trim(),
         audio_path: audioPath,
       });
+
+      // Teto de tempo: se ja estourou MAX_DURACAO_MIN, encerra graciosamente nesta
+      // resposta (fala de fechamento via TTS), sem chamar o LLM.
+      if (tempoEstourou) {
+        const falaFechamento = `${prefixoTransicao}${entrevista.FALA_FECHAMENTO}`;
+        const ordemFech = db.contarTurnos(interviewId) + 1;
+        const audioFech = await sintetizarESalvar(falaFechamento, interviewId, ordemFech);
+        db.criarTurno({
+          interview_id: interviewId,
+          ordem: ordemFech,
+          autor: 'agente',
+          texto: falaFechamento,
+        });
+        db.finalizarInterview(interviewId);
+        db.atualizarStatusAplicacao(candidato.id, 'concluido');
+        if (tentativaId) db.definirUltimoRespId(interviewId, tentativaId);
+        return res.json({
+          ok: true,
+          encerrar: true,
+          interview_id: interviewId,
+          pergunta: falaFechamento,
+          audio_url: audioFech,
+          topicos: entrevista.topicosUnicos(perguntas).map((nome) => ({ nome, estado: 'concluido' })),
+        });
+      }
 
       // 2) LLM — gera a proxima pergunta referenciando a resposta + curriculo.
       const systemPrompt = entrevista.montarSystemPrompt({
@@ -427,6 +574,7 @@ router.post('/interview/answer', (req, res) => {
 
       let { texto: falaVera, encerrar } = entrevista.extrairEncerrar(resposta.texto);
       if (!falaVera) falaVera = 'Pode me contar um pouco mais sobre isso?'; // fallback defensivo
+      if (prefixoTransicao) falaVera = `${prefixoTransicao}${falaVera}`;
 
       // Teto de perguntas (rede de seguranca contra entrevista infinita).
       const agentePosNovo = db.contarTurnos(interviewId, 'agente') + 1;
@@ -445,6 +593,7 @@ router.post('/interview/answer', (req, res) => {
       if (encerrar) {
         db.finalizarInterview(interviewId);
         db.atualizarStatusAplicacao(candidato.id, 'concluido');
+        if (tentativaId) db.definirUltimoRespId(interviewId, tentativaId);
         return res.json({
           ok: true,
           encerrar: true,
@@ -455,6 +604,7 @@ router.post('/interview/answer', (req, res) => {
         });
       }
 
+      if (tentativaId) db.definirUltimoRespId(interviewId, tentativaId);
       return res.json(
         entrevista.montarPayload({
           interviewId,

@@ -558,6 +558,7 @@ const VM_MIDIA = {
   const elTimer = tela.querySelector('[data-timer]');
   const elErro = tela.querySelector('[data-erro]');
   const btnPtt = tela.querySelector('[data-ptt]');
+  const btnRetry = tela.querySelector('[data-retry]');
   const btnRepetir = tela.querySelector('[data-repetir]');
   const overlayIniciar = tela.querySelector('[data-iniciar]');
   const btnIniciar = tela.querySelector('[data-iniciar-btn]');
@@ -574,7 +575,47 @@ const VM_MIDIA = {
   let camStream = null;
   let timerId = null;
   let inicioMs = 0;
+  let maxMs = 0; // teto de duracao (MAX_DURACAO_MIN), para sinal visual do timer
   let encerrando = false;
+  let repeticoesSeguidas = 0; // "nao consegui ouvir" seguidos; na 3a, segue mesmo assim
+  let acaoPendente = null; // ultima acao que falhou (para o retry manual)
+
+  // Flags de TESTE (custo zero; so no front; o servidor so honra teste_repetir em
+  // mock). Use ?vmfalha=N para simular N falhas de rede e ?vmrepetir=1 para
+  // exercitar o fluxo "nao consegui ouvir".
+  const QS = new URLSearchParams(location.search);
+  let falhasSimuladas = parseInt(QS.get('vmfalha') || '0', 10) || 0;
+  const TESTE_REPETIR = QS.get('vmrepetir') === '1';
+
+  function gerarId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return `r-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
+  // fetch com 1 retry silencioso (rede/timeout/5xx). A falha simulada faz a
+  // chamada de verdade e DESCARTA a resposta — exercita a idempotencia do servidor
+  // (o retry reusa o mesmo tentativa_id e nao deve duplicar turnos).
+  async function fetchComRetry(url, opts, timeoutMs = 90000) {
+    let ultimoErro = null;
+    for (let tentativa = 0; tentativa < 2; tentativa++) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const resp = await fetch(url, Object.assign({}, opts, { signal: ctrl.signal }));
+        clearTimeout(t);
+        if (falhasSimuladas > 0) {
+          falhasSimuladas--;
+          throw new Error('falha simulada (teste)');
+        }
+        if (resp.status >= 500) throw new Error(`HTTP ${resp.status}`);
+        return resp;
+      } catch (e) {
+        clearTimeout(t);
+        ultimoErro = e; // 1a falha: tenta de novo em silencio (sem mostrar erro)
+      }
+    }
+    throw ultimoErro;
+  }
 
   const ESTADOS = {
     idle: '',
@@ -626,11 +667,34 @@ const VM_MIDIA = {
     return `${mm}:${ss}`;
   }
 
-  function iniciarTimer() {
-    inicioMs = Date.now();
-    timerId = setInterval(() => {
-      elTimer.textContent = formatarTempo(Date.now() - inicioMs);
-    }, 1000);
+  function atualizarTimer() {
+    const decorrido = Date.now() - inicioMs;
+    elTimer.textContent = formatarTempo(decorrido);
+    // Atingiu o teto: sinaliza visualmente (a entrevista encerra no proximo turno).
+    if (maxMs && decorrido >= maxMs) elTimer.classList.add('vm-timer--esgotado');
+  }
+
+  // Inicia (ou retoma) o cronometro. decorrido = ms ja passados (retomada).
+  function iniciarTimer(decorrido) {
+    if (timerId) clearInterval(timerId);
+    inicioMs = Date.now() - (decorrido || 0);
+    atualizarTimer();
+    timerId = setInterval(atualizarTimer, 1000);
+  }
+
+  // Falha (apos o retry silencioso): mensagem amigavel + botao de retry manual.
+  // Nunca trava a tela.
+  function mostrarFalha(msg, acao) {
+    acaoPendente = acao || null;
+    mostrarErro(msg || 'Tivemos um problema de conexão. Toque para tentar de novo.');
+    btnRetry.hidden = !acaoPendente;
+    setOrbe('idle');
+  }
+
+  function limparFalha() {
+    mostrarErro('');
+    btnRetry.hidden = true;
+    acaoPendente = null;
   }
 
   function pararTudo() {
@@ -659,8 +723,25 @@ const VM_MIDIA = {
   }
 
   function aplicarResposta(dados) {
+    // "Nao consegui ouvir": toca o aviso, reabre o push-to-talk e NAO avanca
+    // topico/competencia. Apos 2 repeticoes seguidas, o proximo envio leva
+    // forcar_avancar (o servidor segue com uma fala de transicao).
+    if (dados.repetir) {
+      repeticoesSeguidas++;
+      elPergunta.textContent = dados.pergunta || '';
+      tocarFala(dados.audio_url, () => {
+        btnPtt.disabled = false;
+        btnPtt.textContent = 'Toque para falar';
+      });
+      return;
+    }
+
+    // Resposta normal (ou encerramento): zera o contador de repeticoes.
+    repeticoesSeguidas = 0;
+
     if (dados.encerrar) {
       encerrando = true;
+      if (timerId) clearInterval(timerId);
       elPergunta.textContent = dados.pergunta || '';
       if (Array.isArray(dados.topicos)) renderChips(dados.topicos);
       btnPtt.hidden = true;
@@ -679,25 +760,35 @@ const VM_MIDIA = {
   }
 
   async function iniciarEntrevista() {
-    mostrarErro('');
+    limparFalha();
+    setOrbe('pensando'); // segue em "pensando" durante o retry silencioso
     try {
-      const resp = await fetch('/api/interview/start', { method: 'POST' });
+      const resp = await fetchComRetry('/api/interview/start', { method: 'POST' });
       const dados = await resp.json();
       if (!resp.ok || !dados.ok) {
-        mostrarErro(dados.erro || 'Não foi possível iniciar a entrevista.');
+        mostrarFalha(dados.erro || 'Não foi possível iniciar a entrevista.', iniciarEntrevista);
         return;
       }
       interviewId = dados.interview_id;
+      if (typeof dados.max_duracao_min === 'number') maxMs = dados.max_duracao_min * 60000;
+
+      // Retomada: se a entrevista ja estava concluida, vai direto pro encerramento.
+      if (dados.encerrar) {
+        aplicarResposta(dados);
+        return;
+      }
+
       ultimoAudioUrl = dados.audio_url;
       elPergunta.textContent = dados.pergunta || '';
       renderChips(dados.topicos);
       btnPtt.hidden = false;
       btnRepetir.hidden = false;
-      iniciarTimer();
+      // Retomada: o timer continua de onde estava (decorrido_ms do servidor).
+      iniciarTimer(dados.decorrido_ms || 0);
       tocarFala(dados.audio_url);
       talvezMostrarCamera();
     } catch (e) {
-      mostrarErro('Falha de conexão ao iniciar a entrevista.');
+      mostrarFalha('Tivemos um problema de conexão. Toque para tentar de novo.', iniciarEntrevista);
     }
   }
 
@@ -731,36 +822,52 @@ const VM_MIDIA = {
     btnPtt.classList.add('vm-ptt--gravando');
   }
 
-  async function enviarResposta() {
+  function enviarResposta() {
     gravando = false;
     btnPtt.classList.remove('vm-ptt--gravando');
     VM_MIDIA.pararTracks(micStream);
     micStream = null;
-    setOrbe('pensando');
-    btnPtt.disabled = true;
+    limparFalha();
 
     const tipo = recorder && recorder.mimeType ? recorder.mimeType : 'audio/webm';
     const blob = new Blob(chunks, { type: tipo });
+    // Um tentativa_id estavel por resposta: reusado no retry para o servidor nao
+    // processar a mesma resposta duas vezes (turnos duplicados).
+    const tentativaId = gerarId();
+    enviarForm(blob, tentativaId);
+  }
+
+  // Envia (ou reenvia) a resposta. Reusa blob + tentativaId no retry manual.
+  async function enviarForm(blob, tentativaId) {
+    setOrbe('pensando');
+    btnPtt.disabled = true;
     const form = new FormData();
     form.append('interview_id', interviewId);
     form.append('audio', blob, 'resposta.webm');
+    form.append('tentativa_id', tentativaId);
+    // Apos 2 repeticoes seguidas, pede ao servidor para seguir mesmo assim.
+    if (repeticoesSeguidas >= 2) form.append('forcar_avancar', '1');
+    // Flag de teste (custo zero; o servidor so honra em mock).
+    if (TESTE_REPETIR) form.append('teste_repetir', '1');
 
     try {
-      const resp = await fetch('/api/interview/answer', { method: 'POST', body: form });
+      const resp = await fetchComRetry('/api/interview/answer', { method: 'POST', body: form });
       const dados = await resp.json();
       if (!resp.ok || !dados.ok) {
-        mostrarErro(dados.erro || 'Não foi possível enviar sua resposta.');
-        setOrbe('idle');
         btnPtt.disabled = false;
         btnPtt.textContent = 'Toque para falar';
+        mostrarFalha(dados.erro || 'Não foi possível enviar sua resposta.', () =>
+          enviarForm(blob, tentativaId),
+        );
         return;
       }
       aplicarResposta(dados);
     } catch (e) {
-      mostrarErro('Falha de conexão ao enviar sua resposta. Tente novamente.');
-      setOrbe('idle');
       btnPtt.disabled = false;
       btnPtt.textContent = 'Toque para falar';
+      mostrarFalha('Tivemos um problema de conexão. Toque para tentar de novo.', () =>
+        enviarForm(blob, tentativaId),
+      );
     }
   }
 
@@ -772,6 +879,14 @@ const VM_MIDIA = {
     } else {
       comecarGravacao();
     }
+  });
+
+  // Retry manual: reexecuta a ultima acao que falhou (start ou envio de resposta).
+  btnRetry.addEventListener('click', () => {
+    const acao = acaoPendente;
+    if (!acao) return;
+    limparFalha();
+    acao();
   });
 
   // Repetir pergunta: retoca o ultimo audio (sem nova chamada ao servidor).

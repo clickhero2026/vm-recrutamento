@@ -188,6 +188,26 @@ function obterInterview(id) {
   return getDb().prepare('SELECT * FROM interviews WHERE id = ?').get(id) || null;
 }
 
+// Entrevista ainda 'em andamento' (nao concluida) de uma application — base da
+// retomada: se existir, recarregamos o estado em vez de criar uma nova.
+function obterInterviewEmAndamentoPorAplicacao(applicationId) {
+  return (
+    getDb()
+      .prepare(
+        "SELECT * FROM interviews WHERE application_id = ? AND status != 'concluido' ORDER BY id DESC LIMIT 1",
+      )
+      .get(applicationId) || null
+  );
+}
+
+// Guarda o id da ultima resposta processada (idempotencia: retry com o mesmo id
+// nao cria turnos duplicados).
+function definirUltimoRespId(interviewId, respId) {
+  getDb()
+    .prepare('UPDATE interviews SET ultimo_resp_id = ? WHERE id = ?')
+    .run(respId || null, interviewId);
+}
+
 function finalizarInterview(id) {
   getDb()
     .prepare("UPDATE interviews SET status = 'concluido', finalizado_em = datetime('now') WHERE id = ?")
@@ -249,6 +269,8 @@ module.exports = {
   // entrevistas
   criarInterview,
   obterInterview,
+  obterInterviewEmAndamentoPorAplicacao,
+  definirUltimoRespId,
   finalizarInterview,
   criarTurno,
   listarTurnos,

@@ -55,7 +55,8 @@ CREATE TABLE IF NOT EXISTS interviews (
   roteiro_id     INTEGER REFERENCES roteiros(id),
   status         TEXT NOT NULL DEFAULT 'iniciada',
   iniciado_em    TEXT NOT NULL DEFAULT (datetime('now')),
-  finalizado_em  TEXT
+  finalizado_em  TEXT,
+  ultimo_resp_id TEXT   -- id da ultima resposta processada (idempotencia: evita turnos duplicados em retry)
 );
 
 -- Turnos da conversa (turno a turno)

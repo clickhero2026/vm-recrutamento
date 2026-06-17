@@ -5,10 +5,25 @@
 // tambem via `npm run migrate`.
 
 const { config } = require('../config');
-const { aplicarSchema } = require('./sqlite');
+const { aplicarSchema, getDb } = require('./sqlite');
+
+// Adiciona uma coluna se ela ainda nao existir (idempotente, p/ bancos antigos).
+// CREATE TABLE IF NOT EXISTS nao altera tabelas ja criadas, entao migracoes
+// incrementais de coluna vivem aqui.
+function adicionarColunaSeFaltar(tabela, coluna, definicao) {
+  const db = getDb();
+  const existe = db
+    .prepare(`SELECT 1 FROM pragma_table_info(?) WHERE name = ?`)
+    .get(tabela, coluna);
+  if (!existe) {
+    db.exec(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${definicao}`);
+  }
+}
 
 function migrar() {
   aplicarSchema();
+  // Migracoes incrementais (idempotentes) para bancos criados antes desta coluna.
+  adicionarColunaSeFaltar('interviews', 'ultimo_resp_id', 'TEXT');
   return config.caminhoBanco;
 }
 

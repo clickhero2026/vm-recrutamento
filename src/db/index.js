@@ -36,6 +36,8 @@ module.exports = {
   // entrevistas
   criarInterview: driver.criarInterview,
   obterInterview: driver.obterInterview,
+  obterInterviewEmAndamentoPorAplicacao: driver.obterInterviewEmAndamentoPorAplicacao,
+  definirUltimoRespId: driver.definirUltimoRespId,
   finalizarInterview: driver.finalizarInterview,
   criarTurno: driver.criarTurno,
   listarTurnos: driver.listarTurnos,

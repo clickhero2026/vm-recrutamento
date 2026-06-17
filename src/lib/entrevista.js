@@ -24,6 +24,31 @@ const MARCADOR_ENCERRAR = '[ENCERRAR]';
 // Frase fixa quando o STT nao entende o audio (TTS gerado e cacheado uma vez).
 const FRASE_NAO_OUVI = 'Desculpe, nao consegui ouvir direito. Pode repetir, por favor?';
 
+// Fala de transicao quando, apos repeticoes seguidas, a Vera segue mesmo assim
+// (evita loop infinito de "nao consegui ouvir").
+const FALA_TRANSICAO = 'Tudo bem, vamos seguir em frente.';
+
+// Converte um datetime do SQLite ('YYYY-MM-DD HH:MM:SS', em UTC) para epoch ms.
+function paraEpochMs(datetimeSqlite) {
+  if (!datetimeSqlite) return NaN;
+  // O 'Z' marca UTC; o SQLite grava datetime('now') em UTC sem timezone.
+  const t = Date.parse(`${String(datetimeSqlite).replace(' ', 'T')}Z`);
+  return Number.isFinite(t) ? t : NaN;
+}
+
+// Tempo decorrido (ms) desde o inicio da entrevista. 0 se a data for invalida.
+function decorridoMs(iniciadoEm, agora = Date.now()) {
+  const inicio = paraEpochMs(iniciadoEm);
+  if (!Number.isFinite(inicio)) return 0;
+  return Math.max(0, agora - inicio);
+}
+
+// Teto de duracao real: true se ja passou de maxMin minutos desde iniciado_em.
+function excedeuDuracao(iniciadoEm, maxMin, agora = Date.now()) {
+  if (!maxMin || maxMin <= 0) return false;
+  return decorridoMs(iniciadoEm, agora) >= maxMin * 60 * 1000;
+}
+
 // Trunca texto preservando o inicio (suficiente para contexto sem estourar tokens).
 function truncar(texto, max) {
   const t = String(texto || '').trim();
@@ -188,6 +213,9 @@ module.exports = {
   FALA_FECHAMENTO,
   MARCADOR_ENCERRAR,
   FRASE_NAO_OUVI,
+  FALA_TRANSICAO,
+  decorridoMs,
+  excedeuDuracao,
   montarPerguntas,
   topicosUnicos,
   estadoTopicos,
