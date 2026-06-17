@@ -281,6 +281,156 @@ const VM_MIDIA = {
   iniciarPreview();
 })();
 
+// ── Tela 8: Permissao de microfone (obrigatorio) ──
+(function () {
+  const btn = document.querySelector('[data-permitir-mic]');
+  if (!btn) return;
+  const btnTentar = document.querySelector('[data-tentar-mic]');
+  const erro = document.querySelector('[data-mic-erro]');
+
+  function mostrarErro(msg) {
+    erro.textContent = msg;
+    erro.hidden = !msg;
+    btnTentar.hidden = !msg; // "Tentar de novo" relanca o pedido
+  }
+
+  async function pedirMicrofone() {
+    mostrarErro('');
+    if (!VM_MIDIA.suportado()) {
+      mostrarErro('Seu navegador não suporta acesso ao microfone. Tente outro navegador.');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Solicitando...';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      VM_MIDIA.pararTracks(stream); // so confirmamos a permissao aqui
+      window.location = '/teste-microfone';
+    } catch (err) {
+      mostrarErro(VM_MIDIA.mensagemErro(err, 'microfone'));
+      btn.disabled = false;
+      btn.textContent = 'Permitir microfone';
+    }
+  }
+
+  btn.addEventListener('click', pedirMicrofone);
+  btnTentar.addEventListener('click', pedirMicrofone);
+})();
+
+// ── Tela 9: Teste de microfone (medidor de nivel via Web Audio API) ──
+(function () {
+  const tela = document.querySelector('[data-tela-teste-mic]');
+  if (!tela) return;
+
+  const btnFalar = tela.querySelector('[data-falar]');
+  const btnContinuar = tela.querySelector('[data-continuar-mic]');
+  const barra = tela.querySelector('[data-nivel-mic]');
+  const status = tela.querySelector('[data-status-mic]');
+  const erro = tela.querySelector('[data-mic-erro]');
+
+  const LIMIAR_RMS = 0.045; // nivel minimo p/ considerar "falando"
+  const TEMPO_ALVO_MS = 1000; // ~1s de som acima do limiar
+  let stream = null;
+  let audioCtx = null;
+  let raf = null;
+  let acumuladoMs = 0;
+  let ultimoTs = 0;
+  let concluido = false;
+
+  function mostrarErro(msg) {
+    erro.textContent = msg;
+    erro.hidden = !msg;
+  }
+
+  function limpar() {
+    if (raf) cancelAnimationFrame(raf);
+    raf = null;
+    VM_MIDIA.pararTracks(stream);
+    stream = null;
+    if (audioCtx && audioCtx.state !== 'closed') audioCtx.close();
+    audioCtx = null;
+  }
+
+  function concluir() {
+    if (concluido) return;
+    concluido = true;
+    status.textContent = '✓ Verificação concluída';
+    status.classList.add('vm-status--ok');
+    btnContinuar.disabled = false;
+    btnFalar.textContent = 'Falar de novo';
+    btnFalar.disabled = false;
+    limpar(); // libera o microfone assim que verificamos
+    barra.style.width = '0%';
+  }
+
+  async function comecar() {
+    mostrarErro('');
+    if (!VM_MIDIA.suportado()) {
+      mostrarErro('Seu navegador não suporta acesso ao microfone. Tente outro navegador.');
+      return;
+    }
+    acumuladoMs = 0;
+    concluido = false;
+    btnFalar.disabled = true;
+    btnFalar.textContent = 'Ouvindo...';
+    status.textContent = '';
+    status.classList.remove('vm-status--ok');
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const AudioCtx = window.AudioContext || window.webkitAudioContext; // iOS
+      audioCtx = new AudioCtx();
+      if (audioCtx.state === 'suspended') await audioCtx.resume(); // iOS exige gesto
+      const fonte = audioCtx.createMediaStreamSource(stream);
+      const analisador = audioCtx.createAnalyser();
+      analisador.fftSize = 1024;
+      fonte.connect(analisador);
+      const dados = new Uint8Array(analisador.fftSize);
+      ultimoTs = performance.now();
+
+      function loop(ts) {
+        const dt = ts - ultimoTs;
+        ultimoTs = ts;
+        analisador.getByteTimeDomainData(dados);
+        let soma = 0;
+        for (let i = 0; i < dados.length; i++) {
+          const v = (dados[i] - 128) / 128;
+          soma += v * v;
+        }
+        const rms = Math.sqrt(soma / dados.length);
+        const nivel = Math.min(1, rms * 3.2); // amplifica p/ exibicao
+        barra.style.width = `${Math.round(nivel * 100)}%`;
+
+        if (rms > LIMIAR_RMS) acumuladoMs += dt;
+        else acumuladoMs = Math.max(0, acumuladoMs - dt * 0.5); // decaimento suave
+
+        if (acumuladoMs >= TEMPO_ALVO_MS) {
+          concluir();
+          return;
+        }
+        raf = requestAnimationFrame(loop);
+      }
+      raf = requestAnimationFrame(loop);
+    } catch (err) {
+      mostrarErro(VM_MIDIA.mensagemErro(err, 'microfone'));
+      btnFalar.disabled = false;
+      btnFalar.textContent = 'Falar';
+      limpar();
+    }
+  }
+
+  btnFalar.addEventListener('click', comecar);
+  btnContinuar.addEventListener('click', () => {
+    limpar();
+    window.location = '/entrevista';
+  });
+
+  // Libera o microfone ao sair da tela.
+  window.addEventListener('pagehide', limpar);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') limpar();
+  });
+})();
+
 // ── Tela de Identificacao ──
 (function () {
   const form = document.getElementById('form-identificacao');

@@ -444,39 +444,53 @@ router.get('/teste-camera', exigirCandidato, (req, res) => {
   res.send(pagina({ titulo: 'Confira sua câmera', tema: 'escuro', etapa: 3, conteudo }));
 });
 
-// ── Tela 8: Permissao de microfone ──
+// ── Tela 8: Permissao de microfone (obrigatorio — canal principal da entrevista) ──
 router.get('/permissao-microfone', exigirCandidato, (req, res) => {
-  res.send(
-    pagina({
-      titulo: 'Permissao de microfone',
-      tema: 'escuro',
-      etapa: 3,
-      conteudo: placeholder({
-        kicker: 'Microfone',
-        titulo: 'Permissao de microfone',
-        descricao: 'Necessario para a entrevista por audio. getUserMedia chega na Fase 2.',
-        acao: botao('/teste-microfone', 'Permitir e continuar'),
-      }),
-    }),
-  );
+  const conteudo = `
+    <section class="vm-hero vm-hero--centro">
+      <p class="vm-kicker">Microfone</p>
+      <h1 class="vm-title">Permissão de microfone</h1>
+      <p class="vm-lead">A entrevista é por áudio. Precisamos do seu microfone para ouvir as suas respostas.</p>
+
+      <p class="vm-form-erro" data-mic-erro hidden role="alert"></p>
+
+      <div class="vm-acoes">
+        <button type="button" class="vm-btn vm-btn--primario" data-permitir-mic>Permitir microfone</button>
+        <button type="button" class="vm-btn vm-btn--secundario" data-tentar-mic hidden>Tentar de novo</button>
+      </div>
+
+      <p class="vm-rodape-nota">
+        No iPhone (Safari), o microfone exige conexão segura (HTTPS) e a permissão é solicitada ao tocar no botão.
+      </p>
+    </section>`;
+
+  res.send(pagina({ titulo: 'Permissão de microfone', tema: 'escuro', etapa: 3, conteudo }));
 });
 
-// ── Tela 9: Teste de microfone ──
+// ── Tela 9: Teste de microfone (medidor de nivel via Web Audio — sem gravar) ──
 router.get('/teste-microfone', exigirCandidato, (req, res) => {
-  res.send(
-    pagina({
-      titulo: 'Teste de microfone',
-      tema: 'escuro',
-      etapa: 3,
-      conteudo: placeholder({
-        kicker: 'Microfone',
-        titulo: 'Teste de microfone',
-        descricao:
-          'Fale a frase de teste, confira o nivel e aceite os termos. Funcionalidade chega na Fase 2.',
-        acao: botao('/entrevista', 'Verificacao concluida, continuar'),
-      }),
-    }),
-  );
+  const conteudo = `
+    <section class="vm-hero vm-hero--centro" data-tela-teste-mic>
+      <p class="vm-kicker">Microfone</p>
+      <h1 class="vm-title">Teste seu microfone</h1>
+      <p class="vm-lead">Toque em FALAR e leia a frase em voz alta.</p>
+
+      <blockquote class="vm-frase-teste">"Testando, você me ouve, Vera?"</blockquote>
+
+      <div class="vm-medidor" role="img" aria-label="Nível do microfone">
+        <div class="vm-medidor__nivel" data-nivel-mic></div>
+      </div>
+
+      <p class="vm-status" data-status-mic aria-live="polite"></p>
+      <p class="vm-form-erro" data-mic-erro hidden role="alert"></p>
+
+      <div class="vm-acoes">
+        <button type="button" class="vm-btn vm-btn--secundario" data-falar>Falar</button>
+        <button type="button" class="vm-btn vm-btn--primario" data-continuar-mic disabled>Continuar</button>
+      </div>
+    </section>`;
+
+  res.send(pagina({ titulo: 'Teste seu microfone', tema: 'escuro', etapa: 3, conteudo }));
 });
 
 // ── Tela 10: Entrevista ──
