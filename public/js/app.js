@@ -22,81 +22,10 @@
 
   const MAX_PDF = 10 * 1024 * 1024;
   const areaErro = form.querySelector('[data-erro]');
-  const passos = form.querySelectorAll('.vm-passo');
-
   function mostrarErro(msg) {
     areaErro.textContent = msg;
     areaErro.hidden = !msg;
     if (msg) areaErro.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-
-  function irParaPasso(n) {
-    passos.forEach((p) => {
-      p.hidden = Number(p.dataset.passo) !== n;
-    });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  // Steppers (- / +)
-  form.querySelectorAll('[data-stepper]').forEach((st) => {
-    const input = st.querySelector('input');
-    const min = Number(input.min);
-    const max = Number(input.max);
-    st.querySelectorAll('.vm-stepper__btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        let v = Number(input.value) || 0;
-        v += btn.dataset.acao === 'mais' ? 1 : -1;
-        if (v < min) v = min;
-        if (v > max) v = max;
-        input.value = v;
-      });
-    });
-  });
-
-  // Chips de opcao unica (segmento) -> grava no input hidden de mesmo nome do grupo
-  form.querySelectorAll('[data-opcao]').forEach((chip) => {
-    chip.addEventListener('click', () => {
-      const grupo = chip.dataset.grupo;
-      form
-        .querySelectorAll(`[data-opcao][data-grupo="${grupo}"]`)
-        .forEach((c) => c.classList.remove('vm-opcao--ativa'));
-      chip.classList.add('vm-opcao--ativa');
-      const hidden = form.querySelector(`input[name="${grupo}"]`);
-      if (hidden) hidden.value = chip.dataset.valor;
-    });
-  });
-
-  // Campo de pretensão: prefixo "R$" (visual, no HTML) + agrupamento de milhar nos
-  // NÚMEROS, preservando o texto livre. O campo é texto por design (permite
-  // descrever "fixo + comissão"), então NÃO aplicamos máscara de número único: só
-  // formatamos cada sequência de dígitos com 4+ algarismos (ex.: 45000 → 45.000),
-  // deixando palavras, "+", parênteses e números curtos (ex.: "5k") intactos.
-  function formatarMoedaLivre(valor) {
-    return valor.replace(/\d[\d.]*/g, (trecho) => {
-      const digitos = trecho.replace(/\./g, '');
-      if (digitos.length < 4) return digitos;
-      return digitos.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    });
-  }
-  const campoMoeda = form.querySelector('[data-moeda]');
-  if (campoMoeda) {
-    campoMoeda.addEventListener('input', () => {
-      const antes = campoMoeda.value;
-      const caret = campoMoeda.selectionStart == null ? antes.length : campoMoeda.selectionStart;
-      const digitosAteCaret = (antes.slice(0, caret).match(/\d/g) || []).length;
-      const depois = formatarMoedaLivre(antes);
-      if (depois === antes) return;
-      campoMoeda.value = depois;
-      // Reposiciona o caret após a mesma quantidade de dígitos (os pontos inseridos
-      // não devem "puxar" o cursor para um lugar errado enquanto se digita).
-      let pos = 0;
-      let vistos = 0;
-      while (pos < depois.length && vistos < digitosAteCaret) {
-        if (/\d/.test(depois[pos])) vistos++;
-        pos++;
-      }
-      campoMoeda.setSelectionRange(pos, pos);
-    });
   }
 
   // Upload de PDF: clique (label nativo) + arrastar/soltar + validacao
@@ -178,21 +107,10 @@
     return true;
   }
 
-  form.querySelector('[data-proximo]').addEventListener('click', () => {
-    if (validarPasso1()) {
-      mostrarErro('');
-      irParaPasso(2);
-    }
-  });
-  form.querySelector('[data-voltar]').addEventListener('click', () => irParaPasso(1));
-
   // Envio
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!validarPasso1()) {
-      irParaPasso(1);
-      return;
-    }
+    if (!validarPasso1()) return;
     const btn = form.querySelector('[data-enviar]');
     btn.disabled = true;
     btn.textContent = 'Enviando...';
@@ -456,6 +374,12 @@ const VM_MIDIA = {
         return;
       }
       stream = s;
+      // Microfone concedido e funcionando: ja libera o CONTINUAR. O que de fato
+      // exigimos para avancar e ter o microfone — a deteccao automatica de fala (e
+      // o timer de seguranca de 8s) viram apenas um "bonus" que sinaliza o ✓. Sem
+      // isto, parar o teste manualmente antes da deteccao deixava o botao preso
+      // (disabled nao recebe clique), forcando o uso do "Continuar mesmo assim".
+      habilitarContinuar();
       const AudioCtx = window.AudioContext || window.webkitAudioContext; // iOS
       audioCtx = new AudioCtx();
       if (audioCtx.state === 'suspended') await audioCtx.resume(); // iOS exige gesto
@@ -596,6 +520,9 @@ const VM_MIDIA = {
   const overlayIniciar = tela.querySelector('[data-iniciar]');
   const btnIniciar = tela.querySelector('[data-iniciar-btn]');
   const audio = tela.querySelector('[data-audio]');
+  // Silêncio válido (WAV, ~46 bytes) usado só para destravar ESTE <audio> no 1º gesto.
+  const SILENCIO_WAV =
+    'data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQIAAAAAAA==';
   const camThumb = tela.querySelector('[data-cam-thumb]');
   const camVideo = tela.querySelector('[data-cam-video]');
 
@@ -612,6 +539,7 @@ const VM_MIDIA = {
   let encerrando = false;
   let repeticoesSeguidas = 0; // "nao consegui ouvir" seguidos; na 3a, segue mesmo assim
   let acaoPendente = null; // ultima acao que falhou (para o retry manual)
+  let overlayProntoEm = 0; // instante em que o overlay ficou pronto (anti clique-fantasma)
 
   // Flags de TESTE (custo zero; so no front; o servidor so honra teste_repetir em
   // mock). Use ?vmfalha=N para simular N falhas de rede e ?vmrepetir=1 para
@@ -741,6 +669,36 @@ const VM_MIDIA = {
     camStream = null;
   }
 
+  // Reseta a tela de entrevista para o estado inicial limpo. Usada no load (estado
+  // robusto, independente do markup) e ao restaurar do bfcache — onde o JS NAO
+  // re-executa e o overlay pode ter ficado escondido (hidden=true) de uma visita
+  // anterior em que se clicou "Iniciar". Sem isto, o overlay nunca reaparece e o
+  // POST /start nunca dispara.
+  function restaurarEstadoInicial() {
+    pararTudo(); // encerra timer/gravacao/streams de qualquer estado anterior
+    interviewId = null;
+    ultimoAudioUrl = null;
+    gravando = false;
+    recorder = null;
+    chunks = [];
+    encerrando = false;
+    repeticoesSeguidas = 0;
+    limparFalha(); // limpa erro + esconde botao de retry + zera acaoPendente
+    setOrbe('idle');
+    elPergunta.textContent = 'Preparando sua entrevista…';
+    elChips.innerHTML = '';
+    elTimer.textContent = '00:00';
+    elTimer.classList.remove('vm-timer--esgotado');
+    btnPtt.hidden = true;
+    btnPtt.disabled = false;
+    btnPtt.textContent = 'Toque para falar';
+    btnPtt.classList.remove('vm-ptt--gravando');
+    btnRepetir.hidden = true;
+    camThumb.hidden = true;
+    overlayIniciar.hidden = false; // overlay volta a aparecer -> permite reiniciar
+    overlayProntoEm = performance.now();
+  }
+
   // Thumbnail da webcam — apenas se a camera ja foi concedida (nao pede prompt aqui).
   async function talvezMostrarCamera() {
     try {
@@ -775,13 +733,7 @@ const VM_MIDIA = {
     if (dados.encerrar) {
       encerrando = true;
       if (timerId) clearInterval(timerId);
-      elPergunta.textContent = dados.pergunta || '';
-      if (Array.isArray(dados.topicos)) renderChips(dados.topicos);
-      btnPtt.hidden = true;
-      btnRepetir.hidden = true;
-      tocarFala(dados.audio_url, () => {
-        window.location = '/finalizacao';
-      });
+      window.location = '/finalizacao';
       return;
     }
     elPergunta.textContent = dados.pergunta || '';
@@ -793,11 +745,15 @@ const VM_MIDIA = {
   }
 
   async function iniciarEntrevista() {
+    console.log('[DIAG-START] iniciarEntrevista: ENTROU');
     limparFalha();
     setOrbe('pensando'); // segue em "pensando" durante o retry silencioso
     try {
+      console.log('[DIAG-START] antes do fetch /start');
       const resp = await fetchComRetry('/api/interview/start', { method: 'POST' });
+      console.log('[DIAG-START] /start status=', resp.status);
       const dados = await resp.json();
+      console.log('[DIAG-START] /start body=', dados);
       if (!resp.ok || !dados.ok) {
         mostrarFalha(dados.erro || 'Não foi possível iniciar a entrevista.', iniciarEntrevista);
         return;
@@ -821,6 +777,7 @@ const VM_MIDIA = {
       tocarFala(dados.audio_url);
       talvezMostrarCamera();
     } catch (e) {
+      console.log('[DIAG-START] /start CATCH:', e && e.message);
       mostrarFalha('Tivemos um problema de conexão. Toque para tentar de novo.', iniciarEntrevista);
     }
   }
@@ -929,22 +886,49 @@ const VM_MIDIA = {
 
   // Inicio (gesto do usuario destrava o audio no iOS).
   btnIniciar.addEventListener('click', async () => {
+    // Ignora "clique fantasma": ao vir do teste de microfone, o clique do "Continuar"
+    // chega como um click no botao Iniciar logo apos o load e reesconde o overlay
+    // antes do usuario ver. Nenhum humano clica em <400ms do overlay ficar pronto.
+    if (performance.now() - overlayProntoEm < 400) { console.log('[DIAG-START] guarda barrou clique (<400ms)'); return; }
+    console.log('[DIAG-START] clique aceito, escondendo overlay');
     overlayIniciar.hidden = true;
-    // Prime o elemento de audio dentro do gesto para destravar no iOS.
+    // Destrava ESTE MESMO <audio> (`audio`, data-audio) dentro do gesto tocando um
+    // silêncio VÁLIDO e curto. Um play() bem-sucedido com fonte válida "abençoa" o nó,
+    // e o desbloqueio vale para o audio.play() da 1ª fala (que roda após o await /start).
+    // O MESMO `audio` será reusado por tocarFala. Fire-and-forget: nunca travar o início.
     try {
       audio.muted = true;
-      await audio.play().catch(() => {});
-      audio.pause();
-      audio.currentTime = 0;
-      audio.muted = false;
-    } catch (e) { /* ignore */ }
+      audio.src = SILENCIO_WAV;
+      audio.play()
+        .then(() => {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.removeAttribute('src');
+          audio.load();
+          audio.muted = false;
+        })
+        .catch((err) => {
+          console.log('[DIAG-START] prime rejeitou:', err && err.name);
+          audio.muted = false;
+        });
+    } catch (e) { console.log('[DIAG-START] erro no prime:', e && e.message); }
+    console.log('[DIAG-START] vai chamar iniciarEntrevista()');
     iniciarEntrevista();
   });
 
   window.addEventListener('pagehide', pararTudo);
+  window.addEventListener('pageshow', (e) => {
+    // Restauracao via bfcache (voltar/avancar): o JS nao re-executa, entao o DOM
+    // pode ter ficado com o overlay escondido de uma visita anterior. Reseta.
+    if (e.persisted) restaurarEstadoInicial();
+  });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden' && gravando && recorder && recorder.state !== 'inactive') {
       recorder.stop();
     }
   });
+
+  // Estado inicial robusto: nao depende so do markup. Garante overlay visivel e
+  // controles escondidos em qualquer carregamento (inclusive restauracoes inconsistentes).
+  restaurarEstadoInicial();
 })();

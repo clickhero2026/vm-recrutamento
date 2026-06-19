@@ -102,7 +102,6 @@ router.post('/aplicacao', (req, res) => {
       const email = String(b.email || '').trim();
       const ddi = String(b.ddi || '+55').trim();
       const telefoneNum = String(b.telefone || '').trim();
-      const cidade = String(b.cidade || '').trim();
       const linkedin = String(b.linkedin_url || '').trim();
 
       // Validacao no servidor (a validacao do front e so conveniencia)
@@ -134,16 +133,6 @@ router.post('/aplicacao', (req, res) => {
 
       const telefone = `${ddi} ${telefoneNum}`.trim();
 
-      // Perguntas extras de vendas (Q1-Q6)
-      const camposExtras = {
-        anos_experiencia: Number.parseInt(b.anos_experiencia, 10) || 0,
-        segmento: ['B2B', 'B2C', 'Ambos'].includes(b.segmento) ? b.segmento : null,
-        crm: String(b.crm || '').trim(),
-        pretensao: String(b.pretensao || '').trim(),
-        disponibilidade_dias: Number.parseInt(b.disponibilidade_dias, 10) || 0,
-        horas_semana: Number.parseInt(b.horas_semana, 10) || 0,
-      };
-
       const token = session.gerarToken();
 
       // Salva o PDF no volume persistente (cria a pasta se nao existir)
@@ -161,11 +150,9 @@ router.post('/aplicacao', (req, res) => {
         sobrenome,
         email,
         telefone,
-        cidade,
         linkedin_url: linkedin,
         curriculo_path: caminhoPdf,
         curriculo_texto: curriculoTexto,
-        campos_extras: camposExtras,
         token,
         status: 'aplicado',
       });

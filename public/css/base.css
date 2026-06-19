@@ -8,6 +8,9 @@ html{ -webkit-text-size-adjust:100%; }
 img,svg{ display:block; max-width:100%; }
 a{ color:inherit; text-decoration:none; }
 button{ font:inherit; color:inherit; cursor:pointer; }
+/* Atributo hidden sempre vence: garante que [hidden] esconda o elemento mesmo
+   quando uma regra de display mais especifica (ex.: .vm-iniciar com flex) competir. */
+[hidden]{ display:none !important; }
 
 /* ── Base tipografica e de cores por tema ── */
 body{
@@ -88,6 +91,8 @@ html.tema-escuro .vm-lead{ color:var(--vm-gray-mid); }
 code{ font-family:var(--font-mono); font-size:.9em; }
 
 .vm-hero{ display:flex; flex-direction:column; gap:1rem; align-items:flex-start; }
+/* /finalizacao: orbe segue o alinhamento à esquerda do resto da vm-hero */
+.vm-final .vm-orb{ margin-inline:0; }
 
 .vm-badge-fase{
   display:inline-block;
@@ -426,6 +431,9 @@ html.tema-escuro .vm-funil__etapa--concluida .vm-funil__rotulo{ color:var(--vm-w
 html.tema-claro .vm-aviso{ background:var(--vm-white); color:var(--vm-black); }
 html.tema-escuro .vm-aviso{ background:color-mix(in srgb, var(--vm-white) 6%, transparent); color:var(--vm-white); }
 
+/* Linha de consentimento (gravacao em audio) — ponto de consentimento, leve destaque */
+.vm-consentimento{ color:var(--vm-orange); font-weight:600; font-size:.85rem; max-width:60ch; }
+
 /* Painel de regras (Instrucoes, tema escuro) */
 .vm-painel-regras{ width:100%; }
 .vm-regras{ list-style:none; counter-reset:regra; display:flex; flex-direction:column; gap:.9rem; margin-top:.75rem; }
@@ -559,6 +567,8 @@ html.tema-escuro .vm-aviso{ background:color-mix(in srgb, var(--vm-white) 6%, tr
   gap:1rem; text-align:center; padding:2rem 1.25rem;
 }
 .vm-iniciar[hidden]{ display:none; }
+.vm-iniciar .vm-orb{ margin-bottom:.5rem; }
+.vm-iniciar__frase{ max-width:32ch; color:var(--vm-gray-mid); font-size:1.05rem; line-height:1.4; }
 
 /* ── Desktop: respiro maior ── */
 @media (min-width:768px){

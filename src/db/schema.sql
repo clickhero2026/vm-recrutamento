@@ -36,11 +36,11 @@ CREATE TABLE IF NOT EXISTS applications (
   sobrenome      TEXT,
   email          TEXT,
   telefone       TEXT,
-  cidade         TEXT,
+  cidade         TEXT,           -- (legado) nao mais gravado; coluna orfa mantida p/ nao recriar tabela
   linkedin_url   TEXT,
   curriculo_path TEXT,            -- caminho do PDF
   curriculo_texto TEXT,           -- texto extraido p/ contexto do agente
-  campos_extras  TEXT,            -- JSON (disponibilidade, pretensao, horas/semana, ...)
+  campos_extras  TEXT,            -- (legado) nao mais coletado; novas linhas gravam '{}'. Coluna orfa mantida.
   token          TEXT UNIQUE,     -- acesso retomavel
   status         TEXT NOT NULL DEFAULT 'aplicado'
                    CHECK (status IN ('aplicado', 'em_entrevista', 'concluido')),

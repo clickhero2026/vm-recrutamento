@@ -110,18 +110,7 @@ router.get('/vaga/:slug', (req, res) => {
   res.send(pagina({ titulo: vaga.titulo, tema: 'claro', conteudo }));
 });
 
-// ── Tela 2: Aplicacao (2 passos em um unico template, troca via JS) ──
-function stepper(nome, valor, min, max, sufixo = '') {
-  return `
-    <div class="vm-stepper" data-stepper>
-      <button type="button" class="vm-stepper__btn" data-acao="menos" aria-label="Diminuir">−</button>
-      <input class="vm-stepper__input" type="number" name="${nome}" value="${valor}"
-             min="${min}" max="${max}" inputmode="numeric" readonly>
-      ${sufixo ? `<span class="vm-stepper__sufixo">${escapeHtml(sufixo)}</span>` : ''}
-      <button type="button" class="vm-stepper__btn" data-acao="mais" aria-label="Aumentar">+</button>
-    </div>`;
-}
-
+// ── Tela 2: Aplicacao (passo unico) ──
 function formularioAplicacao(vaga) {
   const opcoesDdi = [
     ['+55', 'Brasil +55'],
@@ -136,22 +125,13 @@ function formularioAplicacao(vaga) {
     )
     .join('');
 
-  const segmentos = ['B2B', 'B2C', 'Ambos']
-    .map(
-      (s) =>
-        `<button type="button" class="vm-opcao" data-opcao data-grupo="segmento" data-valor="${s}">${s}</button>`,
-    )
-    .join('');
-
   return `
   <form id="form-aplicacao" class="vm-form" enctype="multipart/form-data" novalidate>
     <input type="hidden" name="slug" value="${escapeHtml(vaga.slug)}">
-    <input type="hidden" name="segmento" value="">
 
     <p class="vm-form-erro" data-erro hidden role="alert"></p>
 
-    <!-- PASSO 1 -->
-    <section class="vm-passo" data-passo="1">
+    <section class="vm-passo">
       <h1 class="vm-title">Candidate-se agora</h1>
       <p class="vm-lead">Vaga: ${escapeHtml(vaga.titulo)}</p>
 
@@ -175,10 +155,6 @@ function formularioAplicacao(vaga) {
         </div>
       </div>
 
-      <label class="vm-campo">Cidade <span class="vm-opcional">(opcional)</span>
-        <input type="text" name="cidade" autocomplete="address-level2">
-      </label>
-
       <label class="vm-campo">URL do LinkedIn
         <input type="url" name="linkedin_url" placeholder="https://linkedin.com/in/...">
       </label>
@@ -192,49 +168,11 @@ function formularioAplicacao(vaga) {
         </label>
       </div>
 
-      <button type="button" class="vm-btn vm-btn--primario" data-proximo>Próximo</button>
+      <button type="submit" class="vm-btn vm-btn--primario" data-enviar>Candidatar-me</button>
       <p class="vm-rodape-nota">
         Ao se candidatar, seus dados entram em nosso banco de talentos e podem ser usados para
         esta e futuras oportunidades de vendas. Você pode solicitar a remoção a qualquer momento.
       </p>
-    </section>
-
-    <!-- PASSO 2 -->
-    <section class="vm-passo" data-passo="2" hidden>
-      <h1 class="vm-title">Responda algumas perguntas para concluir sua candidatura</h1>
-
-      <div class="vm-campo">Anos de experiência em vendas
-        ${stepper('anos_experiencia', 0, 0, 50, 'anos')}
-      </div>
-
-      <div class="vm-campo">Segmento principal
-        <div class="vm-opcoes" data-grupo-opcoes="segmento">${segmentos}</div>
-      </div>
-
-      <label class="vm-campo">Ferramentas de CRM que domina
-        <input type="text" name="crm" placeholder="Ex.: HubSpot, Salesforce, Pipedrive">
-      </label>
-
-      <label class="vm-campo">Pretensão de remuneração (R$ fixo + variável/comissão)
-        <span class="vm-moeda">
-          <span class="vm-moeda__prefixo" aria-hidden="true">R$</span>
-          <input type="text" name="pretensao" data-moeda
-            placeholder="Ex.: 2.500 fixo + comissão (OTE 5k)">
-        </span>
-      </label>
-
-      <div class="vm-campo">Disponibilidade para início
-        ${stepper('disponibilidade_dias', 15, 0, 180, 'dias')}
-      </div>
-
-      <div class="vm-campo">Horas por semana disponíveis
-        ${stepper('horas_semana', 40, 1, 80, 'h/sem')}
-      </div>
-
-      <div class="vm-acoes">
-        <button type="button" class="vm-btn vm-btn--secundario" data-voltar>Voltar</button>
-        <button type="submit" class="vm-btn vm-btn--primario" data-enviar>Candidatar-me</button>
-      </div>
     </section>
   </form>`;
 }
@@ -325,8 +263,9 @@ router.get('/preparacao', exigirCandidato, (req, res) => {
     <section class="vm-secao">
       <h2 class="vm-h2">Antes de começar</h2>
       <ul class="vm-lista">
-        <li>Escolha um ambiente silencioso, sem interrupções.</li>
-        <li>Use uma conexão de internet estável.</li>
+        <li>Escolha um ambiente silencioso, sem interrupções, com internet estável.</li>
+        <li>É por áudio: use o botão <b>“toque para falar”</b> — toque para começar a responder e toque de novo para terminar cada resposta.</li>
+        <li>Precisa de mais clareza? Peça à Vera para repetir a pergunta.</li>
         <li>Permita o acesso ao microfone quando solicitado (a câmera é opcional).</li>
         <li>Funciona no celular ou no computador.</li>
       </ul>
@@ -335,7 +274,9 @@ router.get('/preparacao', exigirCandidato, (req, res) => {
     <p class="vm-aviso">Não atualize a página durante a entrevista.</p>
     <p class="vm-rodape-nota">Um link para esta entrevista também foi enviado ao seu e-mail.</p>
 
-    ${botao('/instrucoes', 'Continuar')}`;
+    <p class="vm-consentimento">Esta entrevista é gravada em áudio e analisada para fins de avaliação no processo seletivo.</p>
+
+    ${botao('/permissao-microfone', 'Pode começar')}`;
 
   res.send(
     pagina({ titulo: 'Preparação para a entrevista', tema: 'claro', etapa: 2, conteudo }),
@@ -367,40 +308,9 @@ router.get('/identificacao', (req, res) => {
   res.send(pagina({ titulo: 'Identificação', tema: 'claro', etapa: 1, conteudo }));
 });
 
-// ── Tela 5: Instrucoes (protegida) ──
-router.get('/instrucoes', exigirCandidato, (req, res) => {
-  const regras = [
-    'A entrevista é gravada em áudio e pode ser compartilhada com a equipe de recrutamento.',
-    'Fique num ambiente silencioso. Use o botão "toque para falar" para gravar cada resposta.',
-    'Sinta-se à vontade para pedir que a Vera repita uma pergunta se precisar de mais clareza.',
-    'Toque para começar a responder e toque de novo para terminar cada resposta.',
-  ]
-    .map((r) => `<li>${escapeHtml(r)}</li>`)
-    .join('');
-
-  const conteudo = `
-    <section class="vm-hero vm-hero--centro">
-      <p class="vm-kicker">Agente Vera</p>
-      <h1 class="vm-title">Instruções da entrevista</h1>
-    </section>
-
-    <div class="vm-card vm-painel-regras">
-      <h2 class="vm-h2">Antes de iniciar, leia com atenção</h2>
-      <ol class="vm-regras">${regras}</ol>
-    </div>
-
-    ${botao('/permissao-camera', 'Pode começar, iniciar entrevista')}`;
-
-  res.send(
-    pagina({
-      titulo: 'Instruções da entrevista',
-      tema: 'escuro',
-      etapa: 2,
-      comOrbe: true,
-      conteudo,
-    }),
-  );
-});
+// ── Tela 5: Instrucoes — FUNDIDA em /preparacao. Mantida como redirect 302 p/ nao
+// quebrar links antigos (e-mail/marcador). O conteudo agora vive em /preparacao. ──
+router.get('/instrucoes', exigirCandidato, (req, res) => res.redirect(302, '/preparacao'));
 
 // ── Tela 6: Permissao de camera (opcional, so presenca — nao grava video) ──
 router.get('/permissao-camera', exigirCandidato, (req, res) => {
@@ -533,10 +443,14 @@ router.get('/entrevista', exigirCandidato, (req, res) => {
 
       <!-- Overlay inicial: destrava o audio no iOS (exige gesto do usuario) -->
       <div class="vm-iniciar" data-iniciar>
+        <div class="vm-orb vm-orb--idle" aria-hidden="true">
+          <div class="vm-orb__halo"></div>
+          <div class="vm-orb__core"></div>
+          <div class="vm-orb__ring"></div>
+        </div>
         <p class="vm-kicker">Agente Vera</p>
-        <h1 class="vm-title">Tudo pronto?</h1>
-        <p class="vm-lead">Toque para iniciar. A Vera vai falar e você responde com o botão de microfone.</p>
-        <button type="button" class="vm-btn vm-btn--primario" data-iniciar-btn>Iniciar entrevista</button>
+        <p class="vm-iniciar__frase">Toque para começar. A Vera vai te ouvir e conduzir a conversa.</p>
+        <button type="button" class="vm-btn vm-btn--primario" data-iniciar-btn>Começar com a Vera</button>
       </div>
 
       <audio data-audio playsinline></audio>
@@ -547,21 +461,21 @@ router.get('/entrevista', exigirCandidato, (req, res) => {
 
 // ── Tela 11: Finalizacao ──
 router.get('/finalizacao', (req, res) => {
-  res.send(
-    pagina({
-      titulo: 'Entrevista concluida',
-      tema: 'escuro',
-      comOrbe: true,
-      etapa: 4,
-      conteudo: placeholder({
-        kicker: 'Tudo certo',
-        titulo: 'Entrevista concluida',
-        descricao:
-          'Geramos o relatorio e enviamos ao recrutador. Geracao + envio (Resend) chegam na Fase 4.',
-        acao: botao('/', 'Voltar ao inicio', 'secundario'),
-      }),
-    }),
-  );
+  const conteudo = `
+    <section class="vm-hero vm-final">
+      <div class="vm-orb vm-orb--idle" aria-hidden="true">
+        <div class="vm-orb__halo"></div>
+        <div class="vm-orb__core"></div>
+        <div class="vm-orb__ring"></div>
+      </div>
+      <p class="vm-kicker">Tudo certo</p>
+      <h1 class="vm-title">Entrevista concluída</h1>
+      <p class="vm-lead">Suas respostas foram registradas. A equipe de recrutamento vai analisar sua entrevista e entrar em contato pelos próximos passos.</p>
+      <a class="vm-btn vm-btn--primario"
+         href="https://wa.me/553121811220?text=Me%20candidatei%20no%20processo%20seletivo%20para%20%C3%A1rea%20comercial%20e%20quero%20falar%20com%20o%20recrutador"
+         target="_blank" rel="noopener noreferrer">Falar com recrutador agora</a>
+    </section>`;
+  res.send(pagina({ titulo: 'Entrevista concluida', tema: 'escuro', etapa: 4, conteudo }));
 });
 
 module.exports = router;

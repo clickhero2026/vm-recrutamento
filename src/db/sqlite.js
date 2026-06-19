@@ -134,10 +134,10 @@ function criarRoteiro(roteiro) {
 function criarAplicacao(aplicacao) {
   const info = getDb().prepare(`
     INSERT INTO applications
-      (job_id, nome, sobrenome, email, telefone, cidade, linkedin_url,
+      (job_id, nome, sobrenome, email, telefone, linkedin_url,
        curriculo_path, curriculo_texto, campos_extras, token, status)
     VALUES
-      (@job_id, @nome, @sobrenome, @email, @telefone, @cidade, @linkedin_url,
+      (@job_id, @nome, @sobrenome, @email, @telefone, @linkedin_url,
        @curriculo_path, @curriculo_texto, @campos_extras, @token, @status)
   `).run({
     job_id: aplicacao.job_id,
@@ -145,7 +145,6 @@ function criarAplicacao(aplicacao) {
     sobrenome: aplicacao.sobrenome || null,
     email: aplicacao.email || null,
     telefone: aplicacao.telefone || null,
-    cidade: aplicacao.cidade || null,
     linkedin_url: aplicacao.linkedin_url || null,
     curriculo_path: aplicacao.curriculo_path || null,
     curriculo_texto: aplicacao.curriculo_texto || null,
