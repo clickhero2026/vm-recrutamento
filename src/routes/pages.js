@@ -20,13 +20,13 @@ function botao(href, texto, variante = 'primario') {
 const { exigirCandidato } = session;
 
 // Bloco de placeholder padrao para as telas ainda nao implementadas.
-function placeholder({ kicker, titulo, descricao, acao }) {
+function placeholder({ kicker, titulo, descricao, acao, centro = false, badgeFase = null }) {
   return `
-    <section class="vm-hero">
+    <section class="vm-hero${centro ? ' vm-hero--centro' : ''}">
       ${kicker ? `<p class="vm-kicker">${escapeHtml(kicker)}</p>` : ''}
       <h1 class="vm-title">${escapeHtml(titulo)}</h1>
       <p class="vm-lead">${escapeHtml(descricao)}</p>
-      <p class="vm-badge-fase">Placeholder · Fase 0</p>
+      ${badgeFase ? `<p class="vm-badge-fase">${escapeHtml(badgeFase)}</p>` : ''}
       ${acao || ''}
     </section>`;
 }
@@ -36,18 +36,19 @@ router.get('/', (req, res) => {
   const vaga = db.obterVagaAtiva();
   const acao = vaga
     ? botao(`/vaga/${vaga.slug}`, 'Ver vaga aberta')
-    : `<p class="vm-lead">Nenhuma vaga ativa no momento. Rode <code>npm run seed</code>.</p>`;
+    : `<p class="vm-lead">No momento não há vagas abertas. Volte em breve.</p>`;
   res.send(
     pagina({
       titulo: 'Recrutamento de vendedores',
-      tema: 'escuro',
+      tema: 'claro',
       comOrbe: true,
       conteudo: placeholder({
         kicker: 'Vendedor Mestre',
         titulo: 'Recrutamento de elite para vendas',
         descricao:
-          'Processo seletivo com entrevista conduzida pela agente Vera. Preto como forca, laranja como fogo.',
+          'Processo seletivo com entrevista por voz conduzida pela Vera, nossa entrevistadora de inteligência artificial.',
         acao,
+        centro: true,
       }),
     }),
   );
@@ -77,7 +78,7 @@ router.get('/vaga/:slug', (req, res) => {
     .join('');
 
   const conteudo = `
-    <article class="vm-vaga">
+    <article class="vm-vaga vm-vaga--centro">
       <p class="vm-kicker">Vaga aberta · Perfil ${escapeHtml(vaga.perfil)}</p>
       <h1 class="vm-title">${escapeHtml(vaga.titulo)}</h1>
       ${
@@ -332,7 +333,7 @@ router.get('/permissao-camera', exigirCandidato, (req, res) => {
       </p>
     </section>`;
 
-  res.send(pagina({ titulo: 'Permissão de câmera', tema: 'escuro', etapa: 3, conteudo }));
+  res.send(pagina({ titulo: 'Permissão de câmera', tema: 'claro', etapa: 3, conteudo }));
 });
 
 // ── Tela 7: Teste de camera (preview ao vivo, sem gravar) ──
@@ -355,7 +356,7 @@ router.get('/teste-camera', exigirCandidato, (req, res) => {
       </div>
     </section>`;
 
-  res.send(pagina({ titulo: 'Confira sua câmera', tema: 'escuro', etapa: 3, conteudo }));
+  res.send(pagina({ titulo: 'Confira sua câmera', tema: 'claro', etapa: 3, conteudo }));
 });
 
 // ── Tela 8: Permissao de microfone (obrigatorio — canal principal da entrevista) ──
@@ -378,7 +379,7 @@ router.get('/permissao-microfone', exigirCandidato, (req, res) => {
       </p>
     </section>`;
 
-  res.send(pagina({ titulo: 'Permissão de microfone', tema: 'escuro', etapa: 3, conteudo }));
+  res.send(pagina({ titulo: 'Permissão de microfone', tema: 'claro', etapa: 3, conteudo }));
 });
 
 // ── Tela 9: Teste de microfone (medidor de nivel via Web Audio — sem gravar) ──
@@ -407,7 +408,7 @@ router.get('/teste-microfone', exigirCandidato, (req, res) => {
       <a class="vm-link-discreto" href="/entrevista" data-continuar-assim>Continuar mesmo assim</a>
     </section>`;
 
-  res.send(pagina({ titulo: 'Teste seu microfone', tema: 'escuro', etapa: 3, conteudo }));
+  res.send(pagina({ titulo: 'Teste seu microfone', tema: 'claro', etapa: 3, conteudo }));
 });
 
 // ── Tela 10: Entrevista (push-to-talk com a Vera) ──
@@ -456,13 +457,13 @@ router.get('/entrevista', exigirCandidato, (req, res) => {
       <audio data-audio playsinline></audio>
     </div>`;
 
-  res.send(pagina({ titulo: 'Entrevista', tema: 'escuro', etapa: 4, conteudo }));
+  res.send(pagina({ titulo: 'Entrevista', tema: 'claro', etapa: 4, conteudo }));
 });
 
 // ── Tela 11: Finalizacao ──
 router.get('/finalizacao', (req, res) => {
   const conteudo = `
-    <section class="vm-hero vm-final">
+    <section class="vm-hero vm-hero--centro vm-final">
       <div class="vm-orb vm-orb--idle" aria-hidden="true">
         <div class="vm-orb__halo"></div>
         <div class="vm-orb__core"></div>
@@ -475,7 +476,7 @@ router.get('/finalizacao', (req, res) => {
          href="https://wa.me/553121811220?text=Me%20candidatei%20no%20processo%20seletivo%20para%20%C3%A1rea%20comercial%20e%20quero%20falar%20com%20o%20recrutador"
          target="_blank" rel="noopener noreferrer">Falar com recrutador agora</a>
     </section>`;
-  res.send(pagina({ titulo: 'Entrevista concluida', tema: 'escuro', etapa: 4, conteudo }));
+  res.send(pagina({ titulo: 'Entrevista concluida', tema: 'claro', etapa: 4, conteudo }));
 });
 
 module.exports = router;

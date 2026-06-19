@@ -91,8 +91,6 @@ html.tema-escuro .vm-lead{ color:var(--vm-gray-mid); }
 code{ font-family:var(--font-mono); font-size:.9em; }
 
 .vm-hero{ display:flex; flex-direction:column; gap:1rem; align-items:flex-start; }
-/* /finalizacao: orbe segue o alinhamento à esquerda do resto da vm-hero */
-.vm-final .vm-orb{ margin-inline:0; }
 
 .vm-badge-fase{
   display:inline-block;
@@ -181,6 +179,11 @@ html.tema-escuro .vm-funil__etapa--concluida .vm-funil__rotulo{ color:var(--vm-w
 
 /* ── Tela de Vaga ── */
 .vm-vaga{ display:flex; flex-direction:column; gap:1.1rem; align-items:flex-start; }
+/* Variante centralizada: título/kicker/chips ao centro; textos longos à esquerda p/ leitura */
+.vm-vaga--centro{ align-items:center; text-align:center; }
+.vm-vaga--centro .vm-chips{ justify-content:center; }
+.vm-vaga--centro > .vm-lead{ align-self:stretch; text-align:left; }
+.vm-vaga--centro .vm-card{ text-align:left; }
 .vm-secao{ display:flex; flex-direction:column; gap:.6rem; width:100%; }
 /* Faixa de pagamento como pill de destaque (preto solido + texto branco) */
 .vm-pay-chip{
@@ -209,6 +212,7 @@ html.tema-escuro .vm-funil__etapa--concluida .vm-funil__rotulo{ color:var(--vm-w
   html.tema-claro .vm-container:has(.vm-cta-fixa){ padding-bottom:6rem; }
 }
 @media (min-width:768px){
+  .vm-cta-fixa{ display:flex; justify-content:center; }
   .vm-cta-fixa .vm-btn{ width:auto; }
 }
 
@@ -562,13 +566,16 @@ html.tema-escuro .vm-aviso{ background:color-mix(in srgb, var(--vm-white) 6%, tr
 /* Overlay inicial (destrava o audio no iOS) */
 .vm-iniciar{
   position:fixed; inset:0; z-index:20;
-  background:var(--vm-black);
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:1rem; text-align:center; padding:2rem 1.25rem;
 }
+html.tema-claro .vm-iniciar{ background:var(--vm-offwhite); }
+html.tema-escuro .vm-iniciar{ background:var(--vm-black); }
 .vm-iniciar[hidden]{ display:none; }
 .vm-iniciar .vm-orb{ margin-bottom:.5rem; }
-.vm-iniciar__frase{ max-width:32ch; color:var(--vm-gray-mid); font-size:1.05rem; line-height:1.4; }
+.vm-iniciar__frase{ max-width:32ch; font-size:1.05rem; line-height:1.4; }
+html.tema-claro .vm-iniciar__frase{ color:var(--vm-gray-dark); }
+html.tema-escuro .vm-iniciar__frase{ color:var(--vm-gray-mid); }
 
 /* ── Desktop: respiro maior ── */
 @media (min-width:768px){

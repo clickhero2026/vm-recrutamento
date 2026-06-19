@@ -66,16 +66,16 @@ const ROTEIRO_SDR = {
 
 const VAGA_SDR = {
   slug: 'sdr-prevendas',
-  titulo: 'SDR / Pre-vendas',
+  titulo: 'SDR / Pré-vendas',
   perfil: 'SDR',
-  faixa_pagamento: 'R$ 2.000 fixo + comissoes (OTE ate R$ 4.500)',
-  skills: ['Prospeccao ativa', 'Qualificacao de leads', 'CRM', 'Resiliencia', 'Cadencia de follow-up'],
+  faixa_pagamento: 'R$ 2.000 fixo + comissões (até R$ 4.500)',
+  skills: ['Prospecção ativa', 'Qualificação de leads', 'CRM', 'Resiliência', 'Cadência de follow-up'],
   descricao:
-    'Buscamos um SDR para prospeccao e qualificacao de leads, com ritmo, organizacao e ' +
-    'resiliencia. Voce sera a primeira voz do cliente e a porta de entrada do nosso funil.',
+    'Buscamos um SDR para prospecção e qualificação de leads, com ritmo, organização e ' +
+    'resiliência. Você será a primeira voz do cliente e a porta de entrada do nosso funil.',
   sobre_empresa:
-    'Somos uma operacao comercial orientada a metodo e performance. Aqui vendas e' +
-    ' levado a serio: processo claro, ferramentas boas e cultura de alta exigencia.',
+    'Somos uma operação comercial orientada a método e performance. Aqui vendas é' +
+    ' levado a sério: processo claro, ferramentas boas e cultura de alta exigência.',
   ativo: true,
 };
 

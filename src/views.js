@@ -66,7 +66,7 @@ function pagina({ titulo, conteudo, tema = 'claro', etapa = null, comOrbe = fals
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0D0B0A">
+  <meta name="theme-color" content="#F4F3F1">
   <title>${escapeHtml(tituloPagina)}</title>
   <meta name="description" content="Recrutamento de vendedores - entrevista com a agente ${escapeHtml(config.agente.nome)}.">
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
