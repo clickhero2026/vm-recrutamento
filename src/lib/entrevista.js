@@ -58,12 +58,13 @@ function truncar(texto, max) {
 // Promise com timeout: rejeita se a chamada externa demorar demais (best-effort:
 // limita a resposta HTTP; o socket subjacente pode ser descartado pelo runtime).
 function comTimeout(promessa, ms, nome) {
-  return Promise.race([
-    promessa,
-    new Promise((_, rej) =>
-      setTimeout(() => rej(new Error(`Tempo esgotado ao chamar ${nome} (> ${ms}ms).`)), ms),
-    ),
-  ]);
+  let timer;
+  const limite = new Promise((_, rej) => {
+    timer = setTimeout(() => rej(new Error(`Tempo esgotado ao chamar ${nome} (> ${ms}ms).`)), ms);
+  });
+  // clearTimeout ao resolver/rejeitar evita deixar o timer pendurado (segurando o
+  // event loop) quando a promessa real responde antes do limite.
+  return Promise.race([promessa, limite]).finally(() => clearTimeout(timer));
 }
 
 // Monta o system prompt da Vera a partir do roteiro (dados) + resumo do curriculo.
