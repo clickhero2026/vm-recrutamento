@@ -11,6 +11,8 @@
 //   - TTS: sintetizar a fala da Vera (providers/tts) e servir o audio
 // O contrato de payload abaixo NAO muda — so a origem dos dados.
 
+const db = require('../db');
+
 // Audio mock da fala da Vera (usado quando INTERVIEW_MOCK=true).
 const AUDIO_MOCK = '/assets/mock-fala.wav';
 
@@ -209,6 +211,36 @@ function payloadPergunta({ interviewId, perguntas, indice, audioUrl }) {
   });
 }
 
+// Encerramento de entrevista (ponto unico). Toda forma de terminar uma entrevista
+// (teto de perguntas, teto de duracao, perguntas esgotadas, encerramento do LLM, ou
+// a rota /finish) deve passar por aqui — antes essa logica estava duplicada em 4
+// lugares e 3 deles esqueciam de gerar o relatorio (bug). Ordem:
+//   1) marca a interview como concluida;
+//   2) marca a application como concluida;
+//   3) dispara gerarRelatorio em FIRE-AND-FORGET (nunca bloqueia nem propaga; .catch
+//      so loga, igual ao padrao que existia no /finish).
+// O applicationId e derivado do interviewId pela camada de dados (auto-suficiente: o
+// caller nao precisa passa-lo, evitando divergencia com o dono real da entrevista).
+// `deps` e repassado a gerarRelatorio (injecao de dependencia usada pelos testes para
+// nao tocar em rede). Retorna a promise do relatorio (ja com .catch) para os testes
+// poderem aguardar; em producao o caller ignora (fire-and-forget).
+function finalizarEntrevista(interviewId, deps = {}) {
+  const entrevistaRow = db.obterInterview(interviewId);
+  if (!entrevistaRow) throw new Error(`Entrevista ${interviewId} nao encontrada.`);
+
+  db.finalizarInterview(interviewId);
+  db.atualizarStatusAplicacao(entrevistaRow.application_id, 'concluido');
+
+  // require tardio: relatorio.js requer este modulo (truncar/comTimeout); o require no
+  // topo criaria um ciclo. Lazy aqui quebra o ciclo sem mudar o contrato.
+  const { gerarRelatorio } = require('./relatorio');
+  return gerarRelatorio(interviewId, deps).catch((err) =>
+    console.error(
+      `[entrevista] falha ao gerar relatorio da entrevista ${interviewId}: ${err.message}`,
+    ),
+  );
+}
+
 module.exports = {
   AUDIO_MOCK,
   FALA_FECHAMENTO,
@@ -227,4 +259,5 @@ module.exports = {
   montarSystemPrompt,
   montarMensagensLLM,
   extrairEncerrar,
+  finalizarEntrevista,
 };

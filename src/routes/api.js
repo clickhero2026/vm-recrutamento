@@ -14,7 +14,6 @@ const db = require('../db');
 const session = require('../lib/session');
 const { extrairTextoPdf } = require('../lib/curriculo');
 const entrevista = require('../lib/entrevista');
-const { gerarRelatorio } = require('../lib/relatorio');
 // Adaptadores agnosticos (interface). Os SDKs/chaves so sao tocados quando
 // INTERVIEW_MOCK=false; em mock estes modulos nem sao exercitados.
 const llm = require('../providers/llm');
@@ -481,8 +480,7 @@ router.post('/interview/answer', (req, res) => {
           autor: 'agente',
           texto: falaFechamento,
         });
-        db.finalizarInterview(interviewId);
-        db.atualizarStatusAplicacao(candidato.id, 'concluido');
+        entrevista.finalizarEntrevista(interviewId);
         if (tentativaId) db.definirUltimoRespId(interviewId, tentativaId);
         return res.json({
           ok: true,
@@ -562,8 +560,7 @@ router.post('/interview/answer', (req, res) => {
           autor: 'agente',
           texto: falaFechamento,
         });
-        db.finalizarInterview(interviewId);
-        db.atualizarStatusAplicacao(candidato.id, 'concluido');
+        entrevista.finalizarEntrevista(interviewId);
         if (tentativaId) db.definirUltimoRespId(interviewId, tentativaId);
         return res.json({
           ok: true,
@@ -612,8 +609,7 @@ router.post('/interview/answer', (req, res) => {
       });
 
       if (encerrar) {
-        db.finalizarInterview(interviewId);
-        db.atualizarStatusAplicacao(candidato.id, 'concluido');
+        entrevista.finalizarEntrevista(interviewId);
         if (tentativaId) db.definirUltimoRespId(interviewId, tentativaId);
         return res.json({
           ok: true,
@@ -656,18 +652,11 @@ router.post('/interview/finish', (req, res) => {
   if (!entrevistaRow || entrevistaRow.application_id !== candidato.id) {
     return res.status(404).json({ ok: false, erro: 'Entrevista não encontrada.' });
   }
-  db.finalizarInterview(interviewId);
-  db.atualizarStatusAplicacao(candidato.id, 'concluido');
-
-  // Fase 4: gera o relatorio (avaliacao + e-mail ao recrutador) em FIRE-AND-FORGET.
-  // Regras: NUNCA bloqueia nem altera a resposta ao candidato (ele nao ve o relatorio);
-  // qualquer erro e apenas logado, jamais propagado. Em modo mock (default em dev) o
-  // gerarRelatorio NAO chama DeepSeek/Resend — produz avaliacao deterministica e so loga.
-  gerarRelatorio(interviewId).catch((err) =>
-    console.error(
-      `[interview/finish] falha ao gerar relatorio da entrevista ${interviewId}: ${err.message}`,
-    ),
-  );
+  // Encerramento via ponto unico (finaliza interview + application + gera o relatorio
+  // em fire-and-forget). A rota e mantida para usos futuros (ex.: botao de encerrar
+  // manual / painel da Fase 5); o caminho natural de fim de entrevista hoje encerra
+  // dentro de /answer, que tambem passa por finalizarEntrevista.
+  entrevista.finalizarEntrevista(interviewId);
 
   return res.json({ ok: true, redirect: '/finalizacao' });
 });
