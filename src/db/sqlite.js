@@ -247,6 +247,66 @@ function contarTurnos(interviewId, autor) {
     .get(interviewId).n;
 }
 
+// ──────────────────────────────────────────────────────────────
+// Relatorios (Fase 4)
+// ──────────────────────────────────────────────────────────────
+function reportDeLinha(linha) {
+  if (!linha) return null;
+  return {
+    ...linha,
+    pontuacoes: lerJson(linha.pontuacoes, []),
+    destaque_pontos_fortes: lerJson(linha.destaque_pontos_fortes, []),
+    destaque_atencao: lerJson(linha.destaque_atencao, []),
+  };
+}
+
+function criarReport(report) {
+  const info = getDb().prepare(`
+    INSERT INTO reports
+      (interview_id, token, status, resumo, pontuacoes, destaque_pontos_fortes, destaque_atencao)
+    VALUES
+      (@interview_id, @token, @status, @resumo, @pontuacoes, @destaque_pontos_fortes, @destaque_atencao)
+  `).run({
+    interview_id: report.interview_id,
+    token: report.token,
+    status: report.status || 'gerado',
+    resumo: report.resumo || null,
+    pontuacoes: report.pontuacoes != null ? JSON.stringify(report.pontuacoes) : null,
+    destaque_pontos_fortes:
+      report.destaque_pontos_fortes != null ? JSON.stringify(report.destaque_pontos_fortes) : null,
+    destaque_atencao: report.destaque_atencao != null ? JSON.stringify(report.destaque_atencao) : null,
+  });
+  return Number(info.lastInsertRowid);
+}
+
+// Atualiza o status do report; opcionalmente grava enviado_em/destinatario (so quando passados).
+function atualizarStatusReport(id, status, extras = {}) {
+  getDb()
+    .prepare(
+      `UPDATE reports
+         SET status = ?,
+             enviado_em   = COALESCE(?, enviado_em),
+             destinatario = COALESCE(?, destinatario)
+       WHERE id = ?`,
+    )
+    .run(status, extras.enviado_em || null, extras.destinatario || null, id);
+}
+
+function obterReportPorToken(token) {
+  return reportDeLinha(getDb().prepare('SELECT * FROM reports WHERE token = ?').get(token));
+}
+
+// Idempotencia: report ja ENVIADO para esta entrevista (se existir, nao geramos de novo).
+function obterReportEnviadoPorInterview(interviewId) {
+  return reportDeLinha(
+    getDb()
+      .prepare(
+        "SELECT * FROM reports WHERE interview_id = ? AND status = 'enviado' ORDER BY id DESC LIMIT 1",
+      )
+      .get(interviewId),
+  );
+}
+
 module.exports = {
   getDb,
   aplicarSchema,
@@ -274,4 +334,9 @@ module.exports = {
   criarTurno,
   listarTurnos,
   contarTurnos,
+  // relatorios
+  criarReport,
+  atualizarStatusReport,
+  obterReportPorToken,
+  obterReportEnviadoPorInterview,
 };

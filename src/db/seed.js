@@ -9,7 +9,7 @@ const db = require('./index');
 
 // Roteiro SDR (estrutura JSON: abertura + competencias + fechamento + rubrica)
 const ROTEIRO_SDR = {
-  nome: 'SDR - Padrao v1',
+  nome: 'SDR - Padrão v1',
   perfil: 'SDR',
   versao: 1,
   estrutura: {
@@ -17,44 +17,44 @@ const ROTEIRO_SDR = {
     blocos: {
       abertura: [
         'O que te atrai em trabalhar com vendas?',
-        'Conte rapidamente sua experiencia mais recente na area.',
+        'Conte rapidamente sua experiência mais recente na área.',
       ],
       competencias: [
         {
-          nome: 'Resiliencia/volume',
+          nome: 'Resiliência/volume',
           peso: 2,
           pergunta_semente:
             'Conte um dia de muitas tentativas e poucos retornos. Como manteve o ritmo?',
           boa_resposta:
-            'Demonstra constancia, metodo para manter ritmo e nao terceiriza a culpa.',
+            'Demonstra constância, método para manter ritmo e não terceiriza a culpa.',
         },
         {
-          nome: 'Abordagem/comunicacao',
+          nome: 'Abordagem/comunicação',
           peso: 1,
           pergunta_semente: 'Como aborda um lead frio nos primeiros 30 segundos?',
           boa_resposta:
-            'Tem abertura clara, gera valor rapido e desperta interesse sem ser invasivo.',
+            'Tem abertura clara, gera valor rápido e desperta interesse sem ser invasivo.',
         },
         {
-          nome: 'Qualificacao',
+          nome: 'Qualificação',
           peso: 2,
           pergunta_semente:
-            'Quando percebeu que um lead nao era qualificado? Como concluiu isso?',
+            'Quando percebeu que um lead não era qualificado? Como concluiu isso?',
           boa_resposta:
-            'Usa criterios (ex.: BANT/perfil), faz perguntas certas e decide com objetividade.',
+            'Usa critérios (ex.: BANT/perfil), faz perguntas certas e decide com objetividade.',
         },
         {
-          nome: 'Organizacao/CRM',
+          nome: 'Organização/CRM',
           peso: 1,
           pergunta_semente:
-            'Como se organiza para nao perder follow-ups? Que ferramentas usa?',
-          boa_resposta: 'Tem rotina, cadencia e usa CRM/ferramentas de forma disciplinada.',
+            'Como se organiza para não perder follow-ups? Que ferramentas usa?',
+          boa_resposta: 'Tem rotina, cadência e usa CRM/ferramentas de forma disciplinada.',
         },
       ],
       fechamento: [
-        'Disponibilidade de inicio.',
-        'Expectativa de remuneracao/comissao.',
-        'Por que deveriamos te escolher?',
+        'Disponibilidade de início.',
+        'Expectativa de remuneração/comissão.',
+        'Por que deveríamos te escolher?',
       ],
     },
     rubrica: {

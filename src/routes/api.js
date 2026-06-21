@@ -14,6 +14,7 @@ const db = require('../db');
 const session = require('../lib/session');
 const { extrairTextoPdf } = require('../lib/curriculo');
 const entrevista = require('../lib/entrevista');
+const { gerarRelatorio } = require('../lib/relatorio');
 // Adaptadores agnosticos (interface). Os SDKs/chaves so sao tocados quando
 // INTERVIEW_MOCK=false; em mock estes modulos nem sao exercitados.
 const llm = require('../providers/llm');
@@ -646,7 +647,6 @@ router.post('/interview/answer', (req, res) => {
 });
 
 // ── POST /api/interview/finish ── encerra a entrevista
-// TODO (Fase 4): gerar relatorio (resumo + pontuacoes) e enviar ao recrutador (Resend).
 router.post('/interview/finish', (req, res) => {
   const candidato = candidatoApi(req, res);
   if (!candidato) return undefined;
@@ -658,6 +658,17 @@ router.post('/interview/finish', (req, res) => {
   }
   db.finalizarInterview(interviewId);
   db.atualizarStatusAplicacao(candidato.id, 'concluido');
+
+  // Fase 4: gera o relatorio (avaliacao + e-mail ao recrutador) em FIRE-AND-FORGET.
+  // Regras: NUNCA bloqueia nem altera a resposta ao candidato (ele nao ve o relatorio);
+  // qualquer erro e apenas logado, jamais propagado. Em modo mock (default em dev) o
+  // gerarRelatorio NAO chama DeepSeek/Resend — produz avaliacao deterministica e so loga.
+  gerarRelatorio(interviewId).catch((err) =>
+    console.error(
+      `[interview/finish] falha ao gerar relatorio da entrevista ${interviewId}: ${err.message}`,
+    ),
+  );
+
   return res.json({ ok: true, redirect: '/finalizacao' });
 });
 

@@ -581,3 +581,35 @@ html.tema-escuro .vm-iniciar__frase{ color:var(--vm-gray-mid); }
 @media (min-width:768px){
   .vm-container{ padding-top:3rem; }
 }
+
+/* ── Relatorio do recrutador (GET /relatorio/:token) ── */
+.vm-rel{ display:flex; flex-direction:column; gap:1.5rem; width:100%; align-items:stretch; text-align:left; }
+.vm-rel__cab{ display:flex; flex-direction:column; gap:.4rem; }
+.vm-rel__candidato{ font-family:var(--font-display); font-weight:700; text-transform:uppercase; font-size:1.05rem; }
+html.tema-claro .vm-rel__candidato{ color:var(--vm-gray-dark); }
+html.tema-escuro .vm-rel__candidato{ color:var(--vm-gray-mid); }
+
+/* Lista de competencias pontuadas */
+.vm-rel-comps{ display:flex; flex-direction:column; gap:.75rem; }
+.vm-rel-comp{ display:flex; flex-direction:column; gap:.5rem; }
+.vm-rel-comp__cab{ display:flex; align-items:baseline; justify-content:space-between; gap:1rem; }
+.vm-rel-comp__nome{ font-family:var(--font-display); font-weight:700; text-transform:uppercase; font-size:1.05rem; letter-spacing:.02em; }
+.vm-rel-nota{ font-family:var(--font-mono); font-weight:500; font-size:1.15rem; color:var(--vm-orange); white-space:nowrap; }
+.vm-rel-nota small{ font-size:.7em; color:var(--vm-gray-mid); }
+.vm-rel-just{ margin:0; }
+html.tema-claro .vm-rel-just{ color:var(--vm-gray-dark); }
+html.tema-escuro .vm-rel-just{ color:var(--vm-gray-mid); }
+
+/* Competencia NAO coberta: esmaecida + badge neutro (sem cor de alerta proibida) */
+.vm-rel-comp--off{ opacity:.72; }
+.vm-rel-comp--off .vm-rel-nota{ color:var(--vm-gray-mid); }
+.vm-rel-badge{
+  display:inline-block; align-self:flex-start;
+  font-family:var(--font-mono); font-size:.72rem; letter-spacing:.04em;
+  text-transform:uppercase; padding:.2rem .55rem; border-radius:4px;
+  border:1px dashed var(--vm-gray-mid); color:var(--vm-gray-mid);
+}
+
+/* Duas colunas (fortes/atencao) no desktop, empilhadas no mobile */
+.vm-rel-destaques{ display:grid; grid-template-columns:1fr; gap:1.25rem; }
+@media (min-width:768px){ .vm-rel-destaques{ grid-template-columns:1fr 1fr; } }

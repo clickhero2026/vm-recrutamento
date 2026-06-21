@@ -479,4 +479,127 @@ router.get('/finalizacao', (req, res) => {
   res.send(pagina({ titulo: 'Entrevista concluida', tema: 'claro', etapa: 4, conteudo }));
 });
 
+// Nome legivel do candidato (com fallbacks). Local — espelha o helper de relatorio.js.
+function nomeCandidato(candidato) {
+  if (!candidato) return 'Candidato';
+  const nome = [candidato.nome, candidato.sobrenome].filter(Boolean).join(' ').trim();
+  return nome || candidato.email || 'Candidato';
+}
+
+// Pagina simples (titulo + mensagem) no tema, para os casos sem relatorio renderizavel.
+function paginaAviso(res, status, { titulo, descricao }) {
+  return res.status(status).send(
+    pagina({
+      titulo,
+      tema: 'claro',
+      conteudo: placeholder({ titulo, descricao, centro: true }),
+    }),
+  );
+}
+
+// ── Tela 12: Relatorio (recrutador) — GET /relatorio/:token ──
+// Enviada por e-mail ao RECRUTADOR (nunca ao candidato). Acesso so pelo token
+// nao-adivinhavel, mesmo padrao do restante do fluxo. Mensagens de erro sao
+// genericas e no tema: nao vazam stack/tabela/coluna e nao revelam se um token
+// existe (evita enumeracao).
+router.get('/relatorio/:token', (req, res) => {
+  const token = String(req.params.token || '');
+
+  let report;
+  try {
+    report = db.obterReportPorToken(token);
+  } catch (err) {
+    console.error('[relatorio/pagina] erro ao buscar report:', err.message);
+    return paginaAviso(res, 500, {
+      titulo: 'Relatório indisponível',
+      descricao: 'Não foi possível carregar este relatório agora. Tente novamente em instantes.',
+    });
+  }
+
+  // Token invalido/inexistente: resposta generica (nao revela se o token existe).
+  if (!report) {
+    return paginaAviso(res, 404, {
+      titulo: 'Relatório não encontrado',
+      descricao: 'Este link de relatório é inválido ou expirou. Confira o link enviado por e-mail.',
+    });
+  }
+
+  // Ainda processando (acesso logo apos o finish, antes de a geracao concluir).
+  if (report.status === 'pendente') {
+    return paginaAviso(res, 200, {
+      titulo: 'Relatório sendo processado',
+      descricao:
+        'A avaliação desta entrevista ainda está sendo gerada. Atualize a página em instantes.',
+    });
+  }
+
+  // status 'gerado' | 'enviado' | 'erro' -> o conteudo da avaliacao ja existe.
+  // Contexto do candidato/vaga via camada de dados (report -> interview -> aplicacao -> vaga).
+  const interview = db.obterInterview(report.interview_id);
+  const candidato = interview ? db.obterAplicacao(interview.application_id) : null;
+  const vaga = candidato ? db.obterVaga(candidato.job_id) : null;
+  const perfil = (vaga && vaga.perfil) || (interview && interview.perfil) || '';
+
+  const comps = (report.pontuacoes || [])
+    .map((p) => {
+      const naoCoberta = p.coberta === false;
+      const nota = p.nota != null ? `${escapeHtml(String(p.nota))}<small>/5</small>` : '—';
+      return `
+        <article class="vm-card vm-rel-comp${naoCoberta ? ' vm-rel-comp--off' : ''}">
+          <div class="vm-rel-comp__cab">
+            <h3 class="vm-rel-comp__nome">${escapeHtml(p.competencia || '')}</h3>
+            <span class="vm-rel-nota">${nota}</span>
+          </div>
+          ${naoCoberta ? '<span class="vm-rel-badge">Não abordada nesta entrevista</span>' : ''}
+          ${p.justificativa ? `<p class="vm-rel-just">${escapeHtml(p.justificativa)}</p>` : ''}
+        </article>`;
+    })
+    .join('');
+
+  const itens = (lista) =>
+    (lista || []).map((i) => `<li>${escapeHtml(i)}</li>`).join('');
+  const listaFortes = itens(report.destaque_pontos_fortes);
+  const listaAtencao = itens(report.destaque_atencao);
+
+  const conteudo = `
+    <section class="vm-rel">
+      <header class="vm-rel__cab">
+        <p class="vm-kicker">Relatório de entrevista${perfil ? ` · Perfil ${escapeHtml(perfil)}` : ''}</p>
+        <h1 class="vm-title">${escapeHtml(nomeCandidato(candidato))}</h1>
+        ${vaga ? `<p class="vm-rel__candidato">${escapeHtml(vaga.titulo)}</p>` : ''}
+      </header>
+
+      ${
+        report.resumo
+          ? `<section class="vm-secao">
+              <h2 class="vm-h2">Resumo</h2>
+              <div class="vm-card"><p>${escapeHtml(report.resumo)}</p></div>
+            </section>`
+          : ''
+      }
+
+      <section class="vm-secao">
+        <h2 class="vm-h2">Pontuação por competência</h2>
+        <div class="vm-rel-comps">
+          ${comps || '<div class="vm-card"><p class="vm-rel-just">Sem competências pontuadas.</p></div>'}
+        </div>
+      </section>
+
+      <div class="vm-rel-destaques">
+        <section class="vm-secao">
+          <h2 class="vm-h2">Pontos fortes</h2>
+          ${listaFortes ? `<ul class="vm-lista">${listaFortes}</ul>` : '<p class="vm-rel-just">—</p>'}
+        </section>
+        <section class="vm-secao">
+          <h2 class="vm-h2">Pontos de atenção</h2>
+          ${listaAtencao ? `<ul class="vm-lista">${listaAtencao}</ul>` : '<p class="vm-rel-just">—</p>'}
+        </section>
+      </div>
+    </section>`;
+
+  res.send(
+    pagina({ titulo: `Relatório — ${nomeCandidato(candidato)}`, tema: 'claro', conteudo }),
+  );
+});
+
 module.exports = router;

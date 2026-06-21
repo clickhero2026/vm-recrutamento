@@ -25,6 +25,9 @@ const config = {
 
   porta: num(process.env.PORT, 3000),
 
+  // URL publica base para montar links em e-mails (ex.: link do relatorio ao recrutador).
+  baseUrl: (process.env.APP_BASE_URL || 'https://entrevista.vendedormestre.com.br').replace(/\/+$/, ''),
+
   // Caminho do arquivo SQLite. Em producao aponta para o volume (/data/app.db).
   caminhoBanco: path.resolve(process.env.DATABASE_PATH || './data/app.db'),
 
@@ -99,6 +102,8 @@ const config = {
     },
     email: {
       nome: 'resend',
+      // Remetente do relatorio (dominio verificado no Resend). Default sugerido na Fase 4.
+      remetente: process.env.RESEND_FROM_EMAIL || 'relatorios@vendedormestre.com.br',
       resend: { apiKey: process.env.RESEND_API_KEY || '' },
     },
   },

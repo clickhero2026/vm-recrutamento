@@ -42,4 +42,10 @@ module.exports = {
   criarTurno: driver.criarTurno,
   listarTurnos: driver.listarTurnos,
   contarTurnos: driver.contarTurnos,
+
+  // relatorios
+  criarReport: driver.criarReport,
+  atualizarStatusReport: driver.atualizarStatusReport,
+  obterReportPorToken: driver.obterReportPorToken,
+  obterReportEnviadoPorInterview: driver.obterReportEnviadoPorInterview,
 };

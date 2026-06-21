@@ -74,6 +74,9 @@ CREATE TABLE IF NOT EXISTS interview_turns (
 CREATE TABLE IF NOT EXISTS reports (
   id                     INTEGER PRIMARY KEY AUTOINCREMENT,
   interview_id           INTEGER NOT NULL REFERENCES interviews(id),
+  token                  TEXT,   -- link nao-adivinhavel p/ a pagina do relatorio (unico via indice em migrate.js)
+  status                 TEXT NOT NULL DEFAULT 'pendente'
+                           CHECK (status IN ('pendente', 'gerado', 'enviado', 'erro')),
   resumo                 TEXT,
   pontuacoes             TEXT,   -- JSON por competencia
   destaque_pontos_fortes TEXT,

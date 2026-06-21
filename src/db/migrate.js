@@ -24,6 +24,20 @@ function migrar() {
   aplicarSchema();
   // Migracoes incrementais (idempotentes) para bancos criados antes desta coluna.
   adicionarColunaSeFaltar('interviews', 'ultimo_resp_id', 'TEXT');
+
+  // Fase 4 - relatorios: token (link nao-adivinhavel) + status do ciclo de geracao/envio.
+  adicionarColunaSeFaltar('reports', 'token', 'TEXT');
+  adicionarColunaSeFaltar(
+    'reports',
+    'status',
+    "TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'gerado', 'enviado', 'erro'))",
+  );
+  // Indices de reports ficam aqui (e nao no schema.sql) porque dependem das
+  // colunas acima, que em bancos antigos so passam a existir depois do ADD COLUMN.
+  const db = getDb();
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_token ON reports(token)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_reports_interview ON reports(interview_id)');
+
   return config.caminhoBanco;
 }
 
