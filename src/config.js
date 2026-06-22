@@ -55,6 +55,14 @@ const config = {
     email: process.env.RECRUITER_EMAIL || '',
   },
 
+  // Painel do recrutador (Fase 5): segredo da URL/cookie de acesso ao /admin.
+  // Vazio = painel BLOQUEADO (o middleware nega tudo). O cookie de admin e assinado
+  // com o SESSION_SECRET (mesmo mecanismo do cookie do candidato); aqui guardamos
+  // apenas o VALOR comparado.
+  admin: {
+    secret: process.env.ADMIN_SECRET || '',
+  },
+
   entrevista: {
     // Mock = sem chamadas externas (custo zero). Enquanto os providers reais
     // (STT/LLM/TTS) nao estao ligados, o mock e o unico caminho funcional.

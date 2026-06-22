@@ -15,6 +15,7 @@ const { migrar } = require('./db/migrate');
 const db = require('./db');
 const paginas = require('./routes/pages');
 const api = require('./routes/api');
+const admin = require('./routes/admin');
 
 function criarApp() {
   const app = express();
@@ -47,6 +48,7 @@ function criarApp() {
 
   // Rotas
   app.use('/api', api);
+  app.use('/admin', admin); // painel do recrutador (protegido por adminAuth interno)
   app.use('/', paginas);
 
   // 404 simples

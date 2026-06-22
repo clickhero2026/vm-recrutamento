@@ -48,4 +48,10 @@ module.exports = {
   atualizarStatusReport: driver.atualizarStatusReport,
   obterReportPorToken: driver.obterReportPorToken,
   obterReportEnviadoPorInterview: driver.obterReportEnviadoPorInterview,
+
+  // painel do recrutador (Fase 5)
+  listarAplicacoesComContexto: driver.listarAplicacoesComContexto,
+  obterReportPorInterview: driver.obterReportPorInterview,
+  contarAplicacoes: driver.contarAplicacoes,
+  contarEntrevistasConcluidas: driver.contarEntrevistasConcluidas,
 };

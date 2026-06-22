@@ -307,6 +307,52 @@ function obterReportEnviadoPorInterview(interviewId) {
   );
 }
 
+// ──────────────────────────────────────────────────────────────
+// Painel do recrutador (Fase 5)
+// ──────────────────────────────────────────────────────────────
+
+// Lista TODAS as aplicacoes com o contexto que o painel precisa: titulo da vaga,
+// a ultima entrevista da aplicacao e, se houver, o interview_id do ultimo relatorio
+// gerado (para habilitar/linkar o botao "Ver relatorio"). Ordena por criado_em DESC.
+function listarAplicacoesComContexto() {
+  return getDb()
+    .prepare(
+      `SELECT
+         a.id, a.nome, a.sobrenome, a.email, a.telefone, a.status, a.criado_em,
+         j.titulo AS vaga_titulo,
+         (SELECT i.id FROM interviews i
+            WHERE i.application_id = a.id ORDER BY i.id DESC LIMIT 1) AS interview_id,
+         (SELECT r.interview_id FROM reports r
+            JOIN interviews i2 ON i2.id = r.interview_id
+            WHERE i2.application_id = a.id ORDER BY r.id DESC LIMIT 1) AS report_interview_id
+       FROM applications a
+       LEFT JOIN jobs j ON j.id = a.job_id
+       ORDER BY a.criado_em DESC`,
+    )
+    .all();
+}
+
+// Ultimo relatorio de uma entrevista, em QUALQUER status (o painel mostra mesmo
+// 'gerado'/'erro'; difere de obterReportEnviadoPorInterview, que so pega 'enviado').
+function obterReportPorInterview(interviewId) {
+  return reportDeLinha(
+    getDb()
+      .prepare('SELECT * FROM reports WHERE interview_id = ? ORDER BY id DESC LIMIT 1')
+      .get(interviewId),
+  );
+}
+
+// Totais para o rodape do painel.
+function contarAplicacoes() {
+  return getDb().prepare('SELECT COUNT(*) AS n FROM applications').get().n;
+}
+
+function contarEntrevistasConcluidas() {
+  return getDb()
+    .prepare("SELECT COUNT(*) AS n FROM interviews WHERE status = 'concluido'")
+    .get().n;
+}
+
 module.exports = {
   getDb,
   aplicarSchema,
@@ -316,6 +362,11 @@ module.exports = {
   obterVagaAtiva,
   listarVagas,
   criarVaga,
+  // painel (Fase 5)
+  listarAplicacoesComContexto,
+  obterReportPorInterview,
+  contarAplicacoes,
+  contarEntrevistasConcluidas,
   // roteiros
   obterRoteiro,
   obterRoteiroPorNome,
