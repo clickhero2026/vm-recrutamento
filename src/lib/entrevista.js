@@ -20,6 +20,22 @@ const FALA_FECHAMENTO =
   'Obrigada pelas suas respostas! Por aqui encerramos a entrevista. ' +
   'Vamos analisar tudo e a equipe de recrutamento entra em contato. Ate breve!';
 
+// Fala de despedida personalizada com o nome do candidato. Usada nos encerramentos
+// "amigaveis" (teto de perguntas e encerramento manual via /finish), onde queremos
+// uma fala humana de fechamento em vez de uma pergunta inalcancavel. Quando o nome
+// nao esta disponivel, cai numa saudacao sem nome (sem virgula solta).
+function falaDespedida(nome) {
+  const limpo = String(nome || '').trim();
+  const saudacao = limpo
+    ? `Foi um prazer conversar com você, ${limpo}!`
+    : 'Foi um prazer conversar com você!';
+  return (
+    `${saudacao} Sua entrevista está concluída. ` +
+    'Nossa equipe analisará suas respostas e entrará em contato em breve. ' +
+    'Muito obrigada e boa sorte!'
+  );
+}
+
 // Marcador que o LLM adiciona ao FINAL da fala quando decide encerrar.
 const MARCADOR_ENCERRAR = '[ENCERRAR]';
 
@@ -244,6 +260,7 @@ function finalizarEntrevista(interviewId, deps = {}) {
 module.exports = {
   AUDIO_MOCK,
   FALA_FECHAMENTO,
+  falaDespedida,
   MARCADOR_ENCERRAR,
   FRASE_NAO_OUVI,
   FALA_TRANSICAO,

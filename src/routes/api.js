@@ -595,8 +595,18 @@ router.post('/interview/answer', (req, res) => {
       if (prefixoTransicao) falaVera = `${prefixoTransicao}${falaVera}`;
 
       // Teto de perguntas (rede de seguranca contra entrevista infinita).
+      // Distinguimos o corte pelo TETO do encerramento decidido pelo proprio LLM
+      // (via [ENCERRAR]): so o primeiro precisa trocar a fala (ver abaixo).
       const agentePosNovo = db.contarTurnos(interviewId, 'agente') + 1;
-      if (agentePosNovo >= config.entrevista.maxPerguntas) encerrar = true;
+      const cortePorTeto = !encerrar && agentePosNovo >= config.entrevista.maxPerguntas;
+      if (cortePorTeto) encerrar = true;
+
+      // Correcao da "verruga": quando o encerramento e forcado pelo TETO de perguntas
+      // (e nao pelo LLM), o LLM acabou de gerar mais UMA pergunta que o candidato nunca
+      // poderia responder — o front redireciona para /finalizacao ao receber encerrar:true.
+      // Em vez de sintetizar/persistir essa pergunta orfa, trocamos por uma fala de
+      // despedida personalizada. O restante do fluxo (TTS, turno, finalizar) segue igual.
+      if (cortePorTeto) falaVera = entrevista.falaDespedida(candidato.nome);
 
       // 3) TTS — sintetiza a fala da Vera e salva o MP3.
       const ordemAgente = db.contarTurnos(interviewId) + 1;
@@ -643,7 +653,7 @@ router.post('/interview/answer', (req, res) => {
 });
 
 // ── POST /api/interview/finish ── encerra a entrevista
-router.post('/interview/finish', (req, res) => {
+router.post('/interview/finish', async (req, res) => {
   const candidato = candidatoApi(req, res);
   if (!candidato) return undefined;
 
@@ -652,13 +662,45 @@ router.post('/interview/finish', (req, res) => {
   if (!entrevistaRow || entrevistaRow.application_id !== candidato.id) {
     return res.status(404).json({ ok: false, erro: 'Entrevista não encontrada.' });
   }
+
+  // Ja encerrada: nao gera nova despedida nem turno duplicado; so confirma o destino.
+  if (entrevistaRow.status === 'concluido') {
+    return res.json({ ok: true, redirect: '/finalizacao' });
+  }
+
+  // Fala de despedida personalizada antes de encerrar (mesmo padrao do caminho "tempo
+  // estourado"): cria o turno do agente e, no modo real, sintetiza o audio via TTS;
+  // no mock usa o audio fixo. Antes esta rota encerrava sem nenhuma fala final.
+  const falaFechamento = entrevista.falaDespedida(candidato.nome);
+  const ordemFech = db.contarTurnos(interviewId) + 1;
+  let audioUrl = entrevista.AUDIO_MOCK;
+  if (!config.entrevista.mock) {
+    try {
+      audioUrl = await sintetizarESalvar(falaFechamento, interviewId, ordemFech);
+    } catch (e) {
+      console.error('[interview/finish] falha no TTS de despedida:', e.message);
+      audioUrl = entrevista.AUDIO_MOCK;
+    }
+  }
+  db.criarTurno({
+    interview_id: interviewId,
+    ordem: ordemFech,
+    autor: 'agente',
+    texto: falaFechamento,
+  });
+
   // Encerramento via ponto unico (finaliza interview + application + gera o relatorio
   // em fire-and-forget). A rota e mantida para usos futuros (ex.: botao de encerrar
   // manual / painel da Fase 5); o caminho natural de fim de entrevista hoje encerra
   // dentro de /answer, que tambem passa por finalizarEntrevista.
   entrevista.finalizarEntrevista(interviewId);
 
-  return res.json({ ok: true, redirect: '/finalizacao' });
+  return res.json({
+    ok: true,
+    redirect: '/finalizacao',
+    pergunta: falaFechamento,
+    audio_url: audioUrl,
+  });
 });
 
 // ── GET /api/interview/audio/:interviewId/:arquivo ── serve o MP3 da fala da Vera (modo real)

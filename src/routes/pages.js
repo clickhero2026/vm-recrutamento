@@ -413,6 +413,21 @@ router.get('/teste-microfone', exigirCandidato, (req, res) => {
 
 // ── Tela 10: Entrevista (push-to-talk com a Vera) ──
 router.get('/entrevista', exigirCandidato, (req, res) => {
+  // Guarda de reentrada: candidato que JA concluiu a entrevista nao pode reabrir a
+  // interface (antes, o /start ate criava uma entrevista nova). Mostramos um card de
+  // "entrevista concluida" na propria rota — sem redirect silencioso.
+  const jaFinalizada = req.candidato && req.candidato.status === 'concluido';
+  if (jaFinalizada) {
+    const cardConcluida = `
+      <section class="vm-hero vm-hero--centro" style="min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;background:#0D0B0A;color:#F4F3F1;border-radius:16px;padding:3rem 2rem;">
+        <h1 class="vm-title" style="color:#FF5500;margin:0;">ENTREVISTA CONCLUÍDA</h1>
+        <p class="vm-lead" style="color:#F4F3F1;max-width:34rem;margin:0;">Você já completou sua entrevista. Nossa equipe analisará suas respostas e entrará em contato em breve. Obrigado pela participação!</p>
+      </section>`;
+    return res.send(
+      pagina({ titulo: 'Entrevista concluída', tema: 'claro', etapa: 4, conteudo: cardConcluida }),
+    );
+  }
+
   const conteudo = `
     <div class="vm-entrevista" data-entrevista>
       <div class="vm-entrevista__topo">
