@@ -85,39 +85,148 @@ function comTimeout(promessa, ms, nome) {
   return Promise.race([promessa, limite]).finally(() => clearTimeout(timer));
 }
 
+// ── Normalizacao do roteiro (entende o formato rico NOVO e o formato ANTIGO) ──
+//
+// Formato NOVO (Closer/BEI): estrutura = {
+//   metodo, instrucoes_gerais:[...], blocos:[{ id, nome, obrigatorio, pergunta_semente,
+//   sondas_bei:[...], instrucao_vera, perguntas:[...], ... }], competencias:[{ nome, peso,
+//   boa_resposta }], rubrica:{ escala, saida } }.
+// Formato ANTIGO (seed SDR): estrutura = {
+//   blocos:{ abertura:[...], competencias:[{ nome, peso, ... }], fechamento:[...] }, rubrica }.
+//
+// Devolve UMA visao unica { metodo, instrucoesGerais, blocos[], competencias[], rubrica }
+// usada por todo o motor. No formato antigo o objeto `blocos` e convertido para um array
+// equivalente (abertura -> 1 bloco; cada competencia -> 1 bloco; fechamento -> 1 bloco),
+// preservando o comportamento anterior (chips, perguntas e relatorio inalterados).
+function normalizarEstrutura(roteiro) {
+  const est = (roteiro && roteiro.estrutura) || {};
+  const rubrica = est.rubrica || {};
+  const metodo = est.metodo || null;
+  const instrucoesGerais = Array.isArray(est.instrucoes_gerais) ? est.instrucoes_gerais : [];
+
+  // Competencias: no topo (novo) ou dentro de `blocos` (antigo).
+  let competencias = [];
+  if (Array.isArray(est.competencias)) {
+    competencias = est.competencias;
+  } else if (est.blocos && Array.isArray(est.blocos.competencias)) {
+    competencias = est.blocos.competencias;
+  }
+
+  // Blocos: array (novo) ou objeto { abertura, competencias, fechamento } (antigo).
+  let blocos = [];
+  if (Array.isArray(est.blocos)) {
+    blocos = est.blocos;
+  } else if (est.blocos && typeof est.blocos === 'object') {
+    const o = est.blocos;
+    if (Array.isArray(o.abertura) && o.abertura.length) {
+      blocos.push({ id: 'abertura', nome: 'Abertura', obrigatorio: true, perguntas: o.abertura });
+    }
+    for (const c of o.competencias || []) {
+      blocos.push({
+        id: `comp:${c.nome}`,
+        nome: c.nome,
+        obrigatorio: true,
+        pergunta_semente: c.pergunta_semente || `Conte sobre ${c.nome}.`,
+      });
+    }
+    if (Array.isArray(o.fechamento) && o.fechamento.length) {
+      blocos.push({ id: 'fechamento', nome: 'Fechamento', obrigatorio: true, perguntas: o.fechamento });
+    }
+  }
+
+  return { metodo, instrucoesGerais, competencias, blocos, rubrica };
+}
+
+// Perguntas "roteirizadas" de um bloco: a lista explicita (ex.: fechamento) ou, na
+// falta dela, a pergunta-semente. Sondas/secundaria NAO entram aqui (sao guia para o
+// LLM no system prompt, nao perguntas fixas do roteiro).
+function perguntasDoBloco(bloco) {
+  if (Array.isArray(bloco.perguntas) && bloco.perguntas.length) return bloco.perguntas;
+  if (bloco.pergunta_semente) return [bloco.pergunta_semente];
+  return [];
+}
+
+// Fase de um bloco a partir do id (para os chips de progresso).
+function faseDoBloco(bloco) {
+  if (bloco.id === 'abertura') return 'abertura';
+  if (bloco.id === 'fechamento') return 'fechamento';
+  return 'competencia';
+}
+
 // Monta o system prompt da Vera a partir do roteiro (dados) + resumo do curriculo.
+// Agora usa o roteiro RICO: instrucoes gerais, metodo, blocos (com pergunta-semente,
+// sondas BEI e instrucao para a Vera) e as competencias a avaliar.
 function montarSystemPrompt({ roteiro, curriculoTexto, agente, maxPerguntas }) {
-  const blocos = (roteiro && roteiro.estrutura && roteiro.estrutura.blocos) || {};
-  const rubrica = (roteiro && roteiro.estrutura && roteiro.estrutura.rubrica) || {};
-  const competencias = (blocos.competencias || [])
-    .map((c) => `- ${c.nome} (peso ${c.peso || 1}): ${c.pergunta_semente || ''}`)
+  const { metodo, instrucoesGerais, competencias, blocos, rubrica } = normalizarEstrutura(roteiro);
+
+  const linhasCompetencias = competencias
+    .map(
+      (c) =>
+        `- ${c.nome} (peso ${c.peso || 1})${c.boa_resposta ? `: boa resposta = ${c.boa_resposta}` : ''}`,
+    )
     .join('\n');
-  const fechamento = (blocos.fechamento || []).map((q) => `- ${q}`).join('\n');
+
+  // Roteiro detalhado: por bloco, semente/perguntas + sondas BEI + instrucao da Vera.
+  const linhasBlocos = blocos
+    .map((b, i) => {
+      const partes = [`${i + 1}. ${b.nome}${b.obrigatorio === false ? ' (opcional)' : ''}`];
+      const perguntas = perguntasDoBloco(b);
+      if (perguntas.length === 1) {
+        partes.push(`   Pergunta-semente: ${perguntas[0]}`);
+      } else if (perguntas.length > 1) {
+        partes.push('   Perguntas:');
+        for (const q of perguntas) partes.push(`     - ${q}`);
+      }
+      if (b.pergunta_secundaria) partes.push(`   Pergunta secundaria: ${b.pergunta_secundaria}`);
+      if (Array.isArray(b.sondas_bei) && b.sondas_bei.length) {
+        partes.push('   Sondas BEI (use quando a resposta for vaga):');
+        for (const s of b.sondas_bei) partes.push(`     - ${s}`);
+      }
+      if (b.objecao_padrao) partes.push(`   Objecao a usar na simulacao: ${b.objecao_padrao}`);
+      if (Array.isArray(b.o_que_observar) && b.o_que_observar.length) {
+        partes.push('   O que observar:');
+        for (const o of b.o_que_observar) partes.push(`     - ${o}`);
+      }
+      if (b.instrucao_vera) partes.push(`   Instrucao para voce (Vera): ${b.instrucao_vera}`);
+      return partes.join('\n');
+    })
+    .join('\n');
+
   const curriculo = truncar(curriculoTexto, 3000);
 
   return [
     `Voce e ${agente || 'Vera'}, uma entrevistadora de recrutamento de vendedores, em portugues do Brasil.`,
     'Conduza uma entrevista por audio, com tom profissional, direto e acolhedor.',
+    metodo
+      ? `Metodo da entrevista: ${metodo} (entrevista comportamental baseada em eventos reais).`
+      : null,
+    '',
+    'INSTRUCOES GERAIS:',
+    instrucoesGerais.length
+      ? instrucoesGerais.map((i) => `- ${i}`).join('\n')
+      : '- Peca exemplos concretos; evite respostas genericas.',
     '',
     'REGRAS IMPORTANTES:',
     '1. Faca UMA pergunta por vez (curta e clara, falavel em voz alta).',
     '2. Referencie o que o candidato acabou de dizer antes de fazer a proxima pergunta.',
-    '3. Cubra a proxima competencia pendente do roteiro (na ordem, sem repetir as ja cobertas).',
-    `4. Quando ja tiver coberto as competencias OU atingido ${maxPerguntas} perguntas, faca uma fala de encerramento e adicione, na ULTIMA linha, exatamente o marcador ${MARCADOR_ENCERRAR}.`,
+    '3. Siga o roteiro de blocos na ordem; quando a resposta for vaga, aprofunde com as sondas BEI do bloco antes de avancar.',
+    `4. Quando ja tiver coberto os blocos OU atingido ${maxPerguntas} perguntas, faca uma fala de encerramento e adicione, na ULTIMA linha, exatamente o marcador ${MARCADOR_ENCERRAR}.`,
     `5. Use o marcador ${MARCADOR_ENCERRAR} APENAS na fala final de encerramento, nunca antes.`,
     '6. Nao invente informacoes do candidato; baseie-se no curriculo e nas respostas.',
     '',
-    'COMPETENCIAS A AVALIAR (roteiro):',
-    competencias || '- (roteiro sem competencias definidas)',
+    'ROTEIRO DA ENTREVISTA (blocos, na ordem):',
+    linhasBlocos || '- (roteiro sem blocos definidos)',
     '',
-    'FECHAMENTO (temas finais, antes de encerrar):',
-    fechamento || '- disponibilidade, pretensao, por que te escolher',
+    'COMPETENCIAS A AVALIAR:',
+    linhasCompetencias || '- (roteiro sem competencias definidas)',
     '',
-    `RUBRICA: escala ${rubrica.escala || '1-5'} por competencia.`,
+    `RUBRICA: escala ${rubrica.escala || '1-5'} por competencia.${rubrica.saida ? ` Saida esperada: ${rubrica.saida}.` : ''}`,
     '',
     'RESUMO DO CURRICULO DO CANDIDATO (para contexto):',
     curriculo || '(curriculo nao disponivel)',
-  ].join('\n');
+  ]
+    .filter((l) => l !== null)
+    .join('\n');
 }
 
 // Monta as mensagens para o LLM: system + (resumo dos turns antigos) + ultimos N turns.
@@ -155,23 +264,17 @@ function extrairEncerrar(texto) {
   return { texto: t.trim(), encerrar: false };
 }
 
-// Monta a lista linear de perguntas a partir do roteiro (abertura + competencias + fechamento).
+// Monta a lista linear de perguntas a partir do roteiro (blocos na ordem). Cada bloco
+// contribui com sua(s) pergunta(s) roteirizada(s); o topico (chip) e o nome do bloco.
 function montarPerguntas(roteiro) {
-  const blocos = (roteiro && roteiro.estrutura && roteiro.estrutura.blocos) || {};
+  const { blocos } = normalizarEstrutura(roteiro);
   const perguntas = [];
 
-  for (const q of blocos.abertura || []) {
-    perguntas.push({ fase: 'abertura', topico: 'Abertura', texto: q });
-  }
-  for (const c of blocos.competencias || []) {
-    perguntas.push({
-      fase: 'competencia',
-      topico: c.nome,
-      texto: c.pergunta_semente || `Conte sobre ${c.nome}.`,
-    });
-  }
-  for (const q of blocos.fechamento || []) {
-    perguntas.push({ fase: 'fechamento', topico: 'Fechamento', texto: q });
+  for (const bloco of blocos) {
+    const fase = faseDoBloco(bloco);
+    for (const texto of perguntasDoBloco(bloco)) {
+      perguntas.push({ fase, topico: bloco.nome, texto });
+    }
   }
 
   // Fallback minimo caso o roteiro venha vazio.
@@ -266,6 +369,7 @@ module.exports = {
   FALA_TRANSICAO,
   decorridoMs,
   excedeuDuracao,
+  normalizarEstrutura,
   montarPerguntas,
   topicosUnicos,
   estadoTopicos,

@@ -18,15 +18,14 @@
 const { config } = require('../config');
 const db = require('../db');
 const { gerarToken } = require('./session');
-const { truncar, comTimeout } = require('./entrevista');
+const { truncar, comTimeout, normalizarEstrutura } = require('./entrevista');
 const { escapeHtml } = require('../views');
 
 // ── Prompt de avaliacao (system + user) enviado ao DeepSeek ──
 // Saida exigida: SOMENTE JSON (sem markdown), com resumo, pontuacoes[], pontos_fortes[], pontos_atencao[].
 function montarMensagensAvaliacao({ roteiro, vaga, candidato, turns, agente }) {
-  const blocos = (roteiro && roteiro.estrutura && roteiro.estrutura.blocos) || {};
-  const rubrica = (roteiro && roteiro.estrutura && roteiro.estrutura.rubrica) || {};
-  const competencias = (blocos.competencias || [])
+  const { competencias: listaComp, rubrica } = normalizarEstrutura(roteiro);
+  const competencias = listaComp
     .map((c) => `- ${c.nome} (peso ${c.peso || 1}): boa resposta = ${c.boa_resposta || 'n/d'}`)
     .join('\n');
 
@@ -91,8 +90,7 @@ function nomeDoCandidato(candidato) {
 
 // Avaliacao deterministica usada no modo mock (custo zero, sem LLM).
 function avaliacaoMock(roteiro) {
-  const blocos = (roteiro && roteiro.estrutura && roteiro.estrutura.blocos) || {};
-  const competencias = blocos.competencias || [];
+  const { competencias } = normalizarEstrutura(roteiro);
   const pontuacoes = competencias.length
     ? competencias.map((c, i) => {
         // Deterministico: a ULTIMA competencia simula uma NAO coberta (coberta=false),

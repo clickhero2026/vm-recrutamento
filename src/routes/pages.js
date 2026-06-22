@@ -7,6 +7,7 @@
 const express = require('express');
 const db = require('../db');
 const session = require('../lib/session');
+const entrevista = require('../lib/entrevista');
 const { pagina, escapeHtml } = require('../views');
 
 const router = express.Router();
@@ -214,14 +215,11 @@ function vagaERoteiroDaSessao(req) {
 
 // Estima a duracao (faixa em minutos) a partir do roteiro (orientado a dados).
 function estimarDuracao(roteiro) {
-  const blocos = (roteiro && roteiro.estrutura && roteiro.estrutura.blocos) || {};
-  const n =
-    (blocos.abertura || []).length +
-    (blocos.competencias || []).length +
-    (blocos.fechamento || []).length;
-  const perguntas = n || (blocos.competencias || []).length || 6;
-  const min = Math.max(10, Math.round(perguntas * 1.5));
-  const max = Math.round(perguntas * 2);
+  const n = entrevista.montarPerguntas(roteiro).length;
+  // Roteiro vazio cai no fallback de 1 pergunta; usa 6 como base de estimativa.
+  const base = n > 1 ? n : 6;
+  const min = Math.max(10, Math.round(base * 1.5));
+  const max = Math.max(min, Math.round(base * 2));
   return { min, max };
 }
 
@@ -231,9 +229,7 @@ router.get('/preparacao', exigirCandidato, (req, res) => {
   const tituloVaga = vaga ? vaga.titulo : 'em aberto';
   const { min, max } = estimarDuracao(roteiro);
 
-  const competencias = (roteiro && roteiro.estrutura && roteiro.estrutura.blocos
-    ? roteiro.estrutura.blocos.competencias
-    : []) || [];
+  const competencias = entrevista.normalizarEstrutura(roteiro).competencias;
   const chipsTopicos = competencias.length
     ? competencias
         .map((c) => `<span class="vm-chip">${escapeHtml(c.nome)}</span>`)

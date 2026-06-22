@@ -11,6 +11,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "migrate": "node src/db/migrate.js",
+    "migrate:roteiro-closer": "node src/db/migracao_roteiro_closer.js",
     "seed": "node src/db/seed.js",
     "smoke:providers": "node src/scripts/smoke.js",
     "test": "node --test"
