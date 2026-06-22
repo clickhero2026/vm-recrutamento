@@ -101,6 +101,11 @@ const ESTILO_ADMIN = `
   .campo input[type=text]:focus, .campo textarea:focus { outline:none; border-color:var(--laranja); }
   .campo-check { display:flex; align-items:center; gap:.5rem; margin-bottom:1.2rem; }
   .aviso-ok { background:var(--linha); border-left:3px solid var(--laranja); padding:.6rem .9rem; border-radius:4px; margin-bottom:1rem; }
+  .campo input[type=number] { width:6rem; background:var(--campo); color:var(--offwhite); border:1px solid var(--linha); border-radius:6px; padding:.6rem .7rem; font:inherit; }
+  .campo input[type=number]:focus { outline:none; border-color:var(--laranja); }
+  .bloco-card { border:1px solid var(--linha); border-radius:8px; padding:.2rem 1rem; margin-bottom:.7rem; }
+  .bloco-card > summary { font-family:'Barlow Condensed',sans-serif; text-transform:uppercase; letter-spacing:.03em; cursor:pointer; padding:.7rem 0; color:var(--offwhite); font-weight:700; }
+  .bloco-card[open] > summary { border-bottom:1px solid var(--linha); margin-bottom:.8rem; }
 `;
 
 // Shell HTML do painel (sem o header/funil/app.js do candidato).
@@ -196,7 +201,10 @@ router.get('/', (req, res) => {
   const conteudo = `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;">
       <h1 style="margin:0;">Candidatos</h1>
-      <a class="btn btn--ghost" href="/admin/vaga">Editar vaga</a>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+        <a class="btn btn--ghost" href="/admin/vaga">Editar vaga</a>
+        <a class="btn btn--ghost" href="/admin/roteiro">Editar roteiro</a>
+      </div>
     </div>
     <div class="admin-tab-scroll">
       <table class="admin-tab">
@@ -413,6 +421,197 @@ router.post('/vaga', (req, res) => {
   });
 
   res.redirect('/admin/vaga?salvo=1');
+});
+
+// ── Edicao do roteiro de entrevista (B.2) ──
+
+// Resolve o roteiro a editar: SEMPRE o roteiro da vaga ativa (id=1 por padrao).
+function roteiroParaEditar() {
+  const vaga = db.obterVagaAtiva() || db.obterVaga(1);
+  if (vaga && vaga.roteiro_id) {
+    const r = db.obterRoteiro(vaga.roteiro_id);
+    if (r) return r;
+  }
+  return db.obterRoteiro(1) || null;
+}
+
+// Textarea <-> array de strings (uma por linha).
+function linhasDeArray(arr) {
+  return Array.isArray(arr) ? arr.join('\n') : '';
+}
+function arrayDeLinhas(texto) {
+  return String(texto || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
+
+// ── GET /admin/roteiro ── formulario de edicao do roteiro ──
+router.get('/roteiro', (req, res) => {
+  const roteiro = roteiroParaEditar();
+
+  if (!roteiro) {
+    return res.send(
+      paginaAdmin({
+        titulo: 'Editar roteiro',
+        conteudo: `
+          <p><a class="btn btn--ghost" href="/admin">← Voltar ao painel</a></p>
+          <section class="rel-sec"><h1>Roteiro de entrevista</h1><p>Nenhum roteiro cadastrado.</p></section>`,
+      }),
+    );
+  }
+
+  const est = roteiro.estrutura || {};
+  const instrucoes = Array.isArray(est.instrucoes_gerais) ? est.instrucoes_gerais : [];
+  const competencias = Array.isArray(est.competencias) ? est.competencias : [];
+  const blocos = Array.isArray(est.blocos) ? est.blocos : [];
+
+  const salvo = req.query.salvo === '1' ? '<p class="aviso-ok">Roteiro salvo.</p>' : '';
+
+  const compsHtml = competencias
+    .map(
+      (c, i) => `
+      <div class="comp">
+        <label class="campo">
+          <span>Competência</span>
+          <input type="text" name="comp_${i}_nome" value="${escapeHtml(c.nome || '')}">
+        </label>
+        <label class="campo">
+          <span>Peso (1–2)</span>
+          <input type="number" name="comp_${i}_peso" min="1" max="2" value="${escapeHtml(String(c.peso || 1))}">
+        </label>
+        <label class="campo">
+          <span>Boa resposta</span>
+          <textarea name="comp_${i}_boa_resposta" rows="3">${escapeHtml(c.boa_resposta || '')}</textarea>
+        </label>
+      </div>`,
+    )
+    .join('');
+
+  const blocosHtml = blocos
+    .map((b, i) => {
+      const temSemente = Object.prototype.hasOwnProperty.call(b, 'pergunta_semente');
+      const temInstrucao = Object.prototype.hasOwnProperty.call(b, 'instrucao_vera');
+      const temSondas = Array.isArray(b.sondas_bei);
+      const semente = temSemente
+        ? `
+        <label class="campo">
+          <span>Pergunta-semente</span>
+          <textarea name="bloco_${i}_pergunta_semente" rows="3">${escapeHtml(b.pergunta_semente || '')}</textarea>
+        </label>`
+        : '';
+      const instrucao = temInstrucao
+        ? `
+        <label class="campo">
+          <span>Instrução para a Vera</span>
+          <textarea name="bloco_${i}_instrucao_vera" rows="3">${escapeHtml(b.instrucao_vera || '')}</textarea>
+        </label>`
+        : '';
+      const sondas = temSondas
+        ? `
+        <label class="campo">
+          <span>Sondas BEI (uma por linha)</span>
+          <textarea name="bloco_${i}_sondas_bei" rows="4">${escapeHtml(linhasDeArray(b.sondas_bei))}</textarea>
+        </label>`
+        : '';
+      const aberto = b.obrigatorio !== false ? ' open' : '';
+      return `
+      <details class="bloco-card"${aberto}>
+        <summary>${escapeHtml(b.nome || b.id || `Bloco ${i + 1}`)}</summary>
+        <label class="campo-check">
+          <input type="checkbox" name="bloco_${i}_obrigatorio" value="1"${b.obrigatorio !== false ? ' checked' : ''}>
+          <span style="color:var(--offwhite);text-transform:none;">Bloco obrigatório</span>
+        </label>
+        ${semente}${instrucao}${sondas}
+      </details>`;
+    })
+    .join('');
+
+  const conteudo = `
+    <p><a class="btn btn--ghost" href="/admin">← Voltar ao painel</a></p>
+    <h1>Roteiro de entrevista</h1>
+    ${salvo}
+    <form method="POST" action="/admin/roteiro">
+      <input type="hidden" name="id" value="${escapeHtml(String(roteiro.id))}">
+
+      <label class="campo">
+        <span>Instruções gerais da Vera (uma por linha)</span>
+        <textarea name="instrucoes_gerais" rows="6">${escapeHtml(linhasDeArray(instrucoes))}</textarea>
+      </label>
+
+      <h2>Competências</h2>
+      ${compsHtml || '<p>Nenhuma competência cadastrada.</p>'}
+
+      <h2>Blocos</h2>
+      ${blocosHtml || '<p>Nenhum bloco cadastrado.</p>'}
+
+      <button type="submit" class="btn">Salvar roteiro</button>
+    </form>`;
+
+  res.send(paginaAdmin({ titulo: 'Editar roteiro', conteudo }));
+});
+
+// ── POST /admin/roteiro ── salva as alteracoes do roteiro ──
+router.post('/roteiro', (req, res) => {
+  const b = req.body || {};
+  const id = Number(b.id);
+  const roteiro = Number.isFinite(id) ? db.obterRoteiro(id) : null;
+  if (!roteiro) {
+    return res.status(404).send(paginaErroAdmin('Roteiro não encontrado.'));
+  }
+
+  // Parte da estrutura ATUAL (fonte da verdade) e sobrescreve SO os campos editaveis.
+  // Assim preservamos campos fora do formulario: id/competencias_alvo/pergunta_secundaria/
+  // objecao_padrao/o_que_observar/perguntas (fechamento)/metodo/rubrica.
+  const est = JSON.parse(JSON.stringify(roteiro.estrutura || {}));
+
+  est.instrucoes_gerais = arrayDeLinhas(b.instrucoes_gerais);
+
+  const competencias = Array.isArray(est.competencias) ? est.competencias : [];
+  competencias.forEach((c, i) => {
+    if (b[`comp_${i}_nome`] != null) c.nome = String(b[`comp_${i}_nome`]).trim();
+    if (b[`comp_${i}_boa_resposta`] != null) c.boa_resposta = String(b[`comp_${i}_boa_resposta`]).trim();
+    const peso = parseInt(b[`comp_${i}_peso`], 10);
+    if (Number.isFinite(peso)) c.peso = Math.min(2, Math.max(1, peso));
+  });
+
+  const blocos = Array.isArray(est.blocos) ? est.blocos : [];
+  const faltando = [];
+  blocos.forEach((bl, i) => {
+    const obrigatorio =
+      b[`bloco_${i}_obrigatorio`] === '1' || b[`bloco_${i}_obrigatorio`] === 'on';
+    bl.obrigatorio = obrigatorio;
+
+    if (Object.prototype.hasOwnProperty.call(bl, 'pergunta_semente')) {
+      bl.pergunta_semente = String(b[`bloco_${i}_pergunta_semente`] || '').trim();
+      // Validacao: pergunta-semente de bloco obrigatorio nao pode ficar vazia.
+      if (obrigatorio && !bl.pergunta_semente) {
+        faltando.push(bl.nome || bl.id || `Bloco ${i + 1}`);
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(bl, 'instrucao_vera')) {
+      bl.instrucao_vera = String(b[`bloco_${i}_instrucao_vera`] || '').trim();
+    }
+    if (Array.isArray(bl.sondas_bei)) {
+      bl.sondas_bei = arrayDeLinhas(b[`bloco_${i}_sondas_bei`]);
+    }
+  });
+
+  if (faltando.length) {
+    return res.status(400).send(
+      paginaAdmin({
+        titulo: 'Editar roteiro',
+        conteudo: `
+          <p><a class="btn btn--ghost" href="/admin/roteiro">← Voltar</a></p>
+          <section class="rel-sec"><h1>Roteiro de entrevista</h1>
+            <p>A pergunta-semente não pode ficar vazia em blocos obrigatórios: <b>${escapeHtml(faltando.join(', '))}</b>.</p>
+          </section>`,
+      }),
+    );
+  }
+
+  db.atualizarEstruturaRoteiro(id, est);
+  res.redirect('/admin/roteiro?salvo=1');
 });
 
 module.exports = router;

@@ -140,6 +140,26 @@ function obterRoteiroPorNome(nome) {
   return roteiroDeLinha(getDb().prepare('SELECT * FROM roteiros WHERE nome = ?').get(nome));
 }
 
+// Roteiro de um perfil ('SDR'|'CLOSER'). Quando ha mais de um, prioriza a maior versao
+// (e, empatando, o id mais recente). Usado pela tela de edicao do roteiro no painel.
+function obterRoteiroPorPerfil(perfil) {
+  return roteiroDeLinha(
+    getDb()
+      .prepare('SELECT * FROM roteiros WHERE perfil = ? ORDER BY versao DESC, id DESC LIMIT 1')
+      .get(perfil),
+  );
+}
+
+// Atualiza APENAS o campo estrutura (JSON) de um roteiro pelo id. Recebe a estrutura ja
+// como objeto e serializa aqui (espelha o padrao de criarRoteiro). NAO mexe em
+// nome/perfil/versao. Retorna o numero de linhas afetadas (0 se o id nao existir).
+function atualizarEstruturaRoteiro(id, estrutura) {
+  const info = getDb()
+    .prepare("UPDATE roteiros SET estrutura = ?, atualizado_em = datetime('now') WHERE id = ?")
+    .run(JSON.stringify(estrutura || {}), id);
+  return info.changes;
+}
+
 function criarRoteiro(roteiro) {
   const info = getDb().prepare(`
     INSERT INTO roteiros (nome, perfil, versao, estrutura)
@@ -394,6 +414,8 @@ module.exports = {
   // roteiros
   obterRoteiro,
   obterRoteiroPorNome,
+  obterRoteiroPorPerfil,
+  atualizarEstruturaRoteiro,
   criarRoteiro,
   // aplicacoes
   criarAplicacao,

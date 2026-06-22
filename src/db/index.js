@@ -26,6 +26,8 @@ module.exports = {
   // roteiros
   obterRoteiro: driver.obterRoteiro,
   obterRoteiroPorNome: driver.obterRoteiroPorNome,
+  obterRoteiroPorPerfil: driver.obterRoteiroPorPerfil,
+  atualizarEstruturaRoteiro: driver.atualizarEstruturaRoteiro,
   criarRoteiro: driver.criarRoteiro,
 
   // aplicacoes
