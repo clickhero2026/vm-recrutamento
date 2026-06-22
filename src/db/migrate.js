@@ -32,6 +32,14 @@ function migrar() {
     'status',
     "TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'gerado', 'enviado', 'erro'))",
   );
+  // Fase 5 - edicao da vaga pelo painel: garante que os campos editaveis existam em
+  // bancos antigos (no-op se ja existem; nunca faz DROP/recriacao). 'titulo' nao entra
+  // aqui porque ja faz parte do schema original (NOT NULL) e sempre existe.
+  adicionarColunaSeFaltar('jobs', 'faixa_pagamento', 'TEXT');
+  adicionarColunaSeFaltar('jobs', 'descricao', 'TEXT');
+  adicionarColunaSeFaltar('jobs', 'sobre_empresa', 'TEXT');
+  adicionarColunaSeFaltar('jobs', 'ativo', 'INTEGER NOT NULL DEFAULT 1');
+
   // Indices de reports ficam aqui (e nao no schema.sql) porque dependem das
   // colunas acima, que em bancos antigos so passam a existir depois do ADD COLUMN.
   const db = getDb();

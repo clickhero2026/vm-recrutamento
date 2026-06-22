@@ -320,4 +320,99 @@ router.get('/relatorio/:interviewId', (req, res) => {
   res.send(paginaAdmin({ titulo: `Relatório — ${nomeCand}`, conteudo }));
 });
 
+// Resolve a vaga a editar: a ativa (primeira com ativo=1) ou, na falta, a de id=1.
+function vagaParaEditar() {
+  return db.obterVagaAtiva() || db.obterVaga(1) || null;
+}
+
+// ── GET /admin/vaga ── formulario de edicao da vaga ──
+router.get('/vaga', (req, res) => {
+  const vaga = vagaParaEditar();
+
+  if (!vaga) {
+    return res.send(
+      paginaAdmin({
+        titulo: 'Editar vaga',
+        conteudo: `
+          <p><a class="btn btn--ghost" href="/admin">← Voltar ao painel</a></p>
+          <section class="rel-sec"><h1>Editar vaga</h1><p>Nenhuma vaga cadastrada.</p></section>`,
+      }),
+    );
+  }
+
+  const salvo = req.query.salvo === '1'
+    ? '<p class="aviso-ok">Alterações salvas.</p>'
+    : '';
+
+  const conteudo = `
+    <p><a class="btn btn--ghost" href="/admin">← Voltar ao painel</a></p>
+    <h1>Editar vaga</h1>
+    ${salvo}
+    <form method="POST" action="/admin/vaga">
+      <input type="hidden" name="id" value="${escapeHtml(String(vaga.id))}">
+
+      <label class="campo">
+        <span>Título da vaga</span>
+        <input type="text" name="titulo" value="${escapeHtml(vaga.titulo || '')}" required>
+      </label>
+
+      <label class="campo">
+        <span>Faixa de pagamento</span>
+        <input type="text" name="faixa_pagamento" value="${escapeHtml(vaga.faixa_pagamento || '')}" placeholder="R$ 3.000 – R$ 6.000 + comissão">
+      </label>
+
+      <label class="campo">
+        <span>Descrição da vaga</span>
+        <textarea name="descricao" rows="6">${escapeHtml(vaga.descricao || '')}</textarea>
+      </label>
+
+      <label class="campo">
+        <span>Sobre a empresa</span>
+        <textarea name="sobre_empresa" rows="4">${escapeHtml(vaga.sobre_empresa || '')}</textarea>
+      </label>
+
+      <label class="campo-check">
+        <input type="checkbox" name="ativo" value="1"${vaga.ativo ? ' checked' : ''}>
+        <span style="color:var(--offwhite);text-transform:none;">Vaga ativa</span>
+      </label>
+
+      <button type="submit" class="btn">Salvar alterações</button>
+    </form>`;
+
+  res.send(paginaAdmin({ titulo: 'Editar vaga', conteudo }));
+});
+
+// ── POST /admin/vaga ── salva as alteracoes ──
+router.post('/vaga', (req, res) => {
+  const b = req.body || {};
+  const id = Number(b.id);
+  const titulo = String(b.titulo || '').trim();
+
+  const vaga = Number.isFinite(id) ? db.obterVaga(id) : null;
+  if (!vaga) {
+    return res.status(404).send(paginaErroAdmin('Vaga não encontrada.'));
+  }
+  if (!titulo) {
+    return res.status(400).send(
+      paginaAdmin({
+        titulo: 'Editar vaga',
+        conteudo: `
+          <p><a class="btn btn--ghost" href="/admin/vaga">← Voltar</a></p>
+          <section class="rel-sec"><h1>Editar vaga</h1>
+            <p>O título da vaga não pode ficar vazio.</p></section>`,
+      }),
+    );
+  }
+
+  db.atualizarVaga(id, {
+    titulo,
+    faixa_pagamento: String(b.faixa_pagamento || '').trim(),
+    descricao: String(b.descricao || '').trim(),
+    sobre_empresa: String(b.sobre_empresa || '').trim(),
+    ativo: b.ativo === '1' || b.ativo === 'on',
+  });
+
+  res.redirect('/admin/vaga?salvo=1');
+});
+
 module.exports = router;

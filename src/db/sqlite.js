@@ -108,6 +108,29 @@ function criarVaga(vaga) {
   return Number(info.lastInsertRowid);
 }
 
+// Atualiza os campos editaveis da vaga pelo painel (Fase 5). NAO mexe em slug/perfil/
+// roteiro_id/skills (fora do escopo desta versao).
+function atualizarVaga(id, campos) {
+  getDb()
+    .prepare(
+      `UPDATE jobs SET
+         titulo          = @titulo,
+         faixa_pagamento = @faixa_pagamento,
+         descricao       = @descricao,
+         sobre_empresa   = @sobre_empresa,
+         ativo           = @ativo
+       WHERE id = @id`,
+    )
+    .run({
+      id,
+      titulo: campos.titulo,
+      faixa_pagamento: campos.faixa_pagamento || null,
+      descricao: campos.descricao || null,
+      sobre_empresa: campos.sobre_empresa || null,
+      ativo: campos.ativo === false ? 0 : 1,
+    });
+}
+
 // Roteiros
 function obterRoteiro(id) {
   return roteiroDeLinha(getDb().prepare('SELECT * FROM roteiros WHERE id = ?').get(id));
@@ -362,6 +385,7 @@ module.exports = {
   obterVagaAtiva,
   listarVagas,
   criarVaga,
+  atualizarVaga,
   // painel (Fase 5)
   listarAplicacoesComContexto,
   obterReportPorInterview,
