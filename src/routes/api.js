@@ -290,6 +290,17 @@ router.post('/interview/start', async (req, res) => {
   const candidato = candidatoApi(req, res);
   if (!candidato) return undefined;
 
+  // Guarda de re-entrada: candidato que JA concluiu a entrevista nao pode iniciar
+  // outra. Sem isto, obterInterviewEmAndamentoPorAplicacao ignora a entrevista
+  // concluida (filtra status != 'concluido') e o fluxo abaixo criava uma entrevista
+  // NOVA, revertendo a application para 'em_entrevista' e sobrescrevendo dados.
+  if (candidato.status === 'concluido') {
+    return res.status(409).json({
+      erro: 'entrevista_ja_concluida',
+      mensagem: 'Sua entrevista já foi concluída.',
+    });
+  }
+
   try {
     // RETOMADA: so retomamos se existe uma entrevista em andamento VALIDA — isto e,
     // com pelo menos a abertura (1 turno do agente) ja gravada. Uma linha "em
