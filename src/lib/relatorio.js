@@ -19,6 +19,7 @@ const { config } = require('../config');
 const db = require('../db');
 const { gerarToken } = require('./session');
 const { truncar, comTimeout, normalizarEstrutura } = require('./entrevista');
+const { calcularCustoDeepSeek } = require('./custos');
 const { escapeHtml } = require('../views');
 
 // ── Prompt de avaliacao (system + user) enviado ao DeepSeek ──
@@ -242,6 +243,22 @@ async function gerarRelatorio(interviewId, deps = {}) {
       timeoutMs,
       'LLM (relatorio)',
     );
+
+    // Log de uso/custo (best-effort: NUNCA interrompe a geracao do relatorio).
+    try {
+      const custo = calcularCustoDeepSeek(resp && resp.uso);
+      db.registrarUsoApi({
+        provedor: 'deepseek',
+        modelo: resp && resp.modelo,
+        origem: 'relatorio',
+        interview_id: interviewId,
+        uso: resp && resp.uso,
+        custo_usd: custo,
+      });
+    } catch (e) {
+      console.error('[custos] erro ao registrar uso (relatorio):', e);
+    }
+
     avaliacao = parseAvaliacao(resp && resp.texto);
   }
 

@@ -172,6 +172,18 @@ function nomeCompleto(linha) {
   return nome || linha.email || '—';
 }
 
+// Inteiro com separador de milhar (pt-BR).
+function fmtInt(n) {
+  return Number(n || 0).toLocaleString('pt-BR');
+}
+// Custo em USD: 6 casas nos totais, 8 nas linhas (custos por chamada sao minusculos).
+function fmtUsd6(n) {
+  return `$${Number(n || 0).toFixed(6)}`;
+}
+function fmtUsd8(n) {
+  return `$${Number(n || 0).toFixed(8)}`;
+}
+
 // ── GET /admin ── lista de candidatos ──
 router.get('/', (req, res) => {
   const candidatos = db.listarAplicacoesComContexto();
@@ -204,6 +216,7 @@ router.get('/', (req, res) => {
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
         <a class="btn btn--ghost" href="/admin/vaga">Editar vaga</a>
         <a class="btn btn--ghost" href="/admin/roteiro">Editar roteiro</a>
+        <a class="btn btn--ghost" href="/admin/uso">Custos / Uso API</a>
       </div>
     </div>
     <div class="admin-tab-scroll">
@@ -612,6 +625,92 @@ router.post('/roteiro', (req, res) => {
 
   db.atualizarEstruturaRoteiro(id, est);
   res.redirect('/admin/roteiro?salvo=1');
+});
+
+// ── GET /admin/uso ── monitoramento de custos das chamadas ao LLM ──
+router.get('/uso', (req, res) => {
+  const total = db.resumoUsoApi();
+  const porOrigem = db.usoApiPorOrigem();
+  const ultimas = db.ultimasChamadasApi(30);
+
+  // Bloco 2 — por origem.
+  const linhasOrigem = porOrigem
+    .map(
+      (o) => `
+        <tr>
+          <td>${escapeHtml(o.origem)}</td>
+          <td>${fmtInt(o.chamadas)}</td>
+          <td>${fmtInt(o.tokens_entrada)}</td>
+          <td>${fmtInt(o.tokens_saida)}</td>
+          <td>${escapeHtml(fmtUsd6(o.custo_usd))}</td>
+        </tr>`,
+    )
+    .join('');
+
+  // Bloco 3 — ultimas 30 chamadas.
+  const linhasUltimas = ultimas
+    .map(
+      (u) => `
+        <tr>
+          <td>${escapeHtml(formatarDataHora(u.criado_em))}</td>
+          <td>${escapeHtml(u.origem)}</td>
+          <td>${u.interview_id != null ? escapeHtml(String(u.interview_id)) : '—'}</td>
+          <td>${fmtInt(u.cache_hit_tokens)}</td>
+          <td>${fmtInt(u.cache_miss_tokens)}</td>
+          <td>${fmtInt(u.completion_tokens)}</td>
+          <td>${escapeHtml(fmtUsd8(u.custo_usd))}</td>
+        </tr>`,
+    )
+    .join('');
+
+  const conteudo = `
+    <p><a class="btn btn--ghost" href="/admin">← Voltar ao painel</a></p>
+    <h1>Custos / Uso da API</h1>
+
+    <section class="rel-sec">
+      <h2>Totais gerais</h2>
+      <dl class="rel-id">
+        <div><dt>Total gasto (USD)</dt><dd><b>${escapeHtml(fmtUsd6(total.custo_usd))}</b></dd></div>
+        <div><dt>Total de chamadas</dt><dd>${fmtInt(total.chamadas)}</dd></div>
+        <div><dt>Tokens de entrada</dt><dd>${fmtInt(total.cache_hit_tokens)} cache hit · ${fmtInt(total.cache_miss_tokens)} cache miss</dd></div>
+        <div><dt>Tokens de saída</dt><dd>${fmtInt(total.completion_tokens)}</dd></div>
+      </dl>
+    </section>
+
+    <section class="rel-sec">
+      <h2>Por origem</h2>
+      <div class="admin-tab-scroll">
+        <table class="admin-tab">
+          <thead>
+            <tr><th>Origem</th><th>Chamadas</th><th>Tokens entrada</th><th>Tokens saída</th><th>Custo USD</th></tr>
+          </thead>
+          <tbody>
+            ${linhasOrigem || '<tr><td colspan="5">Nenhuma chamada registrada.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="rel-sec">
+      <h2>Últimas 30 chamadas</h2>
+      <div class="admin-tab-scroll">
+        <table class="admin-tab">
+          <thead>
+            <tr><th>Data/hora</th><th>Origem</th><th>Interview ID</th><th>Cache hit</th><th>Cache miss</th><th>Output</th><th>Custo USD</th></tr>
+          </thead>
+          <tbody>
+            ${linhasUltimas || '<tr><td colspan="7">Nenhuma chamada registrada.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="admin-rodape">
+      Os custos só são registrados em modo real (INTERVIEW_MOCK=false). Preços DeepSeek
+      V4-Flash (jun/2026): cache hit $0,0028 / cache miss $0,14 / output $0,28 por 1M tokens.
+    </p>`;
+
+  res.send(paginaAdmin({ titulo: 'Custos / Uso da API', conteudo }));
 });
 
 module.exports = router;

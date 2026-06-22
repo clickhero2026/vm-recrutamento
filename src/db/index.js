@@ -57,4 +57,10 @@ module.exports = {
   obterReportPorInterview: driver.obterReportPorInterview,
   contarAplicacoes: driver.contarAplicacoes,
   contarEntrevistasConcluidas: driver.contarEntrevistasConcluidas,
+
+  // uso/custo de API (monitoramento de custos)
+  registrarUsoApi: driver.registrarUsoApi,
+  resumoUsoApi: driver.resumoUsoApi,
+  usoApiPorOrigem: driver.usoApiPorOrigem,
+  ultimasChamadasApi: driver.ultimasChamadasApi,
 };

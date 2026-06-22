@@ -17,6 +17,7 @@ const entrevista = require('../lib/entrevista');
 // Adaptadores agnosticos (interface). Os SDKs/chaves so sao tocados quando
 // INTERVIEW_MOCK=false; em mock estes modulos nem sao exercitados.
 const llm = require('../providers/llm');
+const { calcularCustoDeepSeek } = require('../lib/custos');
 const stt = require('../providers/stt');
 const tts = require('../providers/tts');
 
@@ -600,6 +601,21 @@ router.post('/interview/answer', (req, res) => {
         config.entrevista.timeoutMs,
         'LLM DeepSeek',
       );
+
+      // Log de uso/custo (best-effort: NUNCA interrompe o fluxo da entrevista).
+      try {
+        const custo = calcularCustoDeepSeek(resposta.uso);
+        db.registrarUsoApi({
+          provedor: 'deepseek',
+          modelo: resposta.modelo,
+          origem: 'entrevista',
+          interview_id: interviewId,
+          uso: resposta.uso,
+          custo_usd: custo,
+        });
+      } catch (e) {
+        console.error('[custos] erro ao registrar uso (entrevista):', e);
+      }
 
       let { texto: falaVera, encerrar } = entrevista.extrairEncerrar(resposta.texto);
       if (!falaVera) falaVera = 'Pode me contar um pouco mais sobre isso?'; // fallback defensivo

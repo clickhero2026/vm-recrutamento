@@ -396,6 +396,97 @@ function contarEntrevistasConcluidas() {
     .get().n;
 }
 
+// ──────────────────────────────────────────────────────────────
+// Uso/custo das chamadas ao LLM (monitoramento de custos)
+// ──────────────────────────────────────────────────────────────
+
+// Helper local: inteiro >= 0 a partir de valor possivelmente string/null/undefined.
+function inteiroNaoNeg(v) {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+// Registra UMA chamada ao LLM em api_usage. BEST-EFFORT: NUNCA lanca para o chamador
+// (uma falha de log de custo jamais pode interromper a entrevista/relatorio). Le os
+// contadores do objeto `uso` BRUTO da API DeepSeek; o custo ja vem calculado.
+function registrarUsoApi({ provedor, modelo, origem, interview_id, uso, custo_usd } = {}) {
+  try {
+    const u = uso || {};
+    const cacheHit = inteiroNaoNeg(u.prompt_cache_hit_tokens);
+    const cacheMiss = inteiroNaoNeg(u.prompt_cache_miss_tokens);
+    const promptTokens = inteiroNaoNeg(u.prompt_tokens);
+    const completionTokens = inteiroNaoNeg(u.completion_tokens);
+    const totalTokens = inteiroNaoNeg(u.total_tokens) || promptTokens + completionTokens;
+
+    getDb()
+      .prepare(
+        `INSERT INTO api_usage
+           (provedor, modelo, origem, interview_id,
+            prompt_tokens, completion_tokens, cache_hit_tokens, cache_miss_tokens,
+            total_tokens, custo_usd)
+         VALUES
+           (@provedor, @modelo, @origem, @interview_id,
+            @prompt_tokens, @completion_tokens, @cache_hit_tokens, @cache_miss_tokens,
+            @total_tokens, @custo_usd)`,
+      )
+      .run({
+        provedor: provedor || 'deepseek',
+        modelo: modelo || null,
+        origem: origem || 'desconhecida',
+        interview_id: interview_id || null,
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        cache_hit_tokens: cacheHit,
+        cache_miss_tokens: cacheMiss,
+        total_tokens: totalTokens,
+        custo_usd: Number.isFinite(Number(custo_usd)) ? Number(custo_usd) : 0,
+      });
+  } catch (err) {
+    console.error(`[custos] falha ao registrar uso de API (origem=${origem}): ${err.message}`);
+  }
+}
+
+// Totais gerais para a pagina de custos (uma unica linha agregada).
+function resumoUsoApi() {
+  return getDb()
+    .prepare(
+      `SELECT
+         COUNT(*)                      AS chamadas,
+         COALESCE(SUM(custo_usd), 0)         AS custo_usd,
+         COALESCE(SUM(cache_hit_tokens), 0)  AS cache_hit_tokens,
+         COALESCE(SUM(cache_miss_tokens), 0) AS cache_miss_tokens,
+         COALESCE(SUM(prompt_tokens), 0)     AS prompt_tokens,
+         COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+         COALESCE(SUM(total_tokens), 0)      AS total_tokens
+       FROM api_usage`,
+    )
+    .get();
+}
+
+// Agregado por origem ('entrevista' | 'relatorio').
+function usoApiPorOrigem() {
+  return getDb()
+    .prepare(
+      `SELECT
+         origem,
+         COUNT(*)                            AS chamadas,
+         COALESCE(SUM(prompt_tokens), 0)     AS tokens_entrada,
+         COALESCE(SUM(completion_tokens), 0) AS tokens_saida,
+         COALESCE(SUM(custo_usd), 0)         AS custo_usd
+       FROM api_usage
+       GROUP BY origem
+       ORDER BY custo_usd DESC`,
+    )
+    .all();
+}
+
+// Ultimas N chamadas (para a tabela de detalhe).
+function ultimasChamadasApi(limite = 30) {
+  return getDb()
+    .prepare('SELECT * FROM api_usage ORDER BY id DESC LIMIT ?')
+    .all(limite);
+}
+
 module.exports = {
   getDb,
   aplicarSchema,
@@ -411,6 +502,11 @@ module.exports = {
   obterReportPorInterview,
   contarAplicacoes,
   contarEntrevistasConcluidas,
+  // uso/custo de API (monitoramento de custos)
+  registrarUsoApi,
+  resumoUsoApi,
+  usoApiPorOrigem,
+  ultimasChamadasApi,
   // roteiros
   obterRoteiro,
   obterRoteiroPorNome,

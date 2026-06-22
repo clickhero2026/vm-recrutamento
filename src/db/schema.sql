@@ -85,8 +85,27 @@ CREATE TABLE IF NOT EXISTS reports (
   destinatario           TEXT
 );
 
+-- Log de uso/custo das chamadas ao LLM (DeepSeek). custo_usd ja calculado na gravacao
+-- (a partir do objeto usage bruto da API) para a pagina de custos ser rapida e auditavel.
+CREATE TABLE IF NOT EXISTS api_usage (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  criado_em         TEXT NOT NULL DEFAULT (datetime('now')),
+  provedor          TEXT NOT NULL DEFAULT 'deepseek',
+  modelo            TEXT,
+  origem            TEXT NOT NULL,              -- 'entrevista' | 'relatorio'
+  interview_id      INTEGER REFERENCES interviews(id),
+  prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+  completion_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_hit_tokens  INTEGER NOT NULL DEFAULT 0,
+  cache_miss_tokens INTEGER NOT NULL DEFAULT 0,
+  total_tokens      INTEGER NOT NULL DEFAULT 0,
+  custo_usd         REAL NOT NULL DEFAULT 0
+);
+
 -- Indices uteis
 CREATE INDEX IF NOT EXISTS idx_jobs_ativo            ON jobs(ativo);
 CREATE INDEX IF NOT EXISTS idx_applications_token    ON applications(token);
 CREATE INDEX IF NOT EXISTS idx_applications_job      ON applications(job_id);
 CREATE INDEX IF NOT EXISTS idx_turns_interview       ON interview_turns(interview_id, ordem);
+CREATE INDEX IF NOT EXISTS idx_api_usage_interview   ON api_usage(interview_id);
+CREATE INDEX IF NOT EXISTS idx_api_usage_criado      ON api_usage(criado_em);
