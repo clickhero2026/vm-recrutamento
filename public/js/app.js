@@ -533,6 +533,10 @@ const VM_MIDIA = {
   let chunks = [];
   let micStream = null;
   let camStream = null;
+  // Gravacao de VIDEO da entrevista inteira (continua, em paralelo ao push-to-talk).
+  // Best-effort: so grava se a camera foi concedida; nunca bloqueia a entrevista.
+  let videoRecorder = null;
+  let videoChunks = [];
   let timerId = null;
   let inicioMs = 0;
   let maxMs = 0; // teto de duracao (MAX_DURACAO_MIN), para sinal visual do timer
@@ -663,6 +667,11 @@ const VM_MIDIA = {
     if (recorder && recorder.state !== 'inactive') {
       try { recorder.stop(); } catch (e) { /* ignore */ }
     }
+    // Para a gravacao de video se ativa. O onstop SO faz upload quando encerrando=true
+    // (encerramento real da entrevista); aqui (reset/load) nao dispara upload.
+    if (videoRecorder && videoRecorder.state !== 'inactive') {
+      try { videoRecorder.stop(); } catch (e) { /* ignore */ }
+    }
     VM_MIDIA.pararTracks(micStream);
     VM_MIDIA.pararTracks(camStream);
     micStream = null;
@@ -681,6 +690,8 @@ const VM_MIDIA = {
     gravando = false;
     recorder = null;
     chunks = [];
+    videoRecorder = null;
+    videoChunks = [];
     encerrando = false;
     repeticoesSeguidas = 0;
     limparFalha(); // limpa erro + esconde botao de retry + zera acaoPendente
@@ -699,17 +710,117 @@ const VM_MIDIA = {
     overlayProntoEm = performance.now();
   }
 
-  // Thumbnail da webcam — apenas se a camera ja foi concedida (nao pede prompt aqui).
-  async function talvezMostrarCamera() {
+  // Escolhe um container de video suportado (Chrome/Firefox: webm; Safari: mp4).
+  function escolherMimeVideo() {
+    const tipos = ['video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+    for (const t of tipos) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
+    }
+    return '';
+  }
+
+  // Inicia a gravacao de VIDEO da entrevista (camera + microfone), em paralelo ao
+  // push-to-talk. So grava se a camera ja foi concedida (NAO pede prompt aqui) — a
+  // camera e opcional no funil; sem ela, a entrevista segue normalmente sem video.
+  // Mostra tambem o thumbnail da webcam. Best-effort: qualquer falha e silenciosa.
+  async function iniciarVideo() {
     try {
       if (!navigator.permissions || !navigator.permissions.query) return;
-      const status = await navigator.permissions.query({ name: 'camera' });
-      if (status.state !== 'granted') return;
-      camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      let permitida = false;
+      try {
+        const status = await navigator.permissions.query({ name: 'camera' });
+        permitida = status.state === 'granted';
+      } catch (e) {
+        permitida = false; // navegador sem suporte a query de permissao
+      }
+      if (!permitida) return;
+
+      // Resolucao limitada a 720p (controla tamanho/banda); audio junto p/ a fala entrar
+      // na gravacao. O elemento de preview e muted (sem eco).
+      camStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: true,
+      });
       camVideo.srcObject = camStream;
       camThumb.hidden = false;
+
+      if (!window.MediaRecorder) return; // sem MediaRecorder: so o thumbnail
+      const mime = escolherMimeVideo();
+      const opcoes = { videoBitsPerSecond: 1000000 }; // ~1 Mbps p/ controlar tamanho
+      if (mime) opcoes.mimeType = mime;
+      videoRecorder = new MediaRecorder(camStream, opcoes);
+      videoChunks = [];
+      videoRecorder.ondataavailable = (ev) => {
+        if (ev.data && ev.data.size > 0) videoChunks.push(ev.data);
+      };
+      // Upload SO ocorre no encerramento real (encerrando=true); paradas de
+      // reset/load nao disparam upload.
+      videoRecorder.onstop = () => {
+        if (encerrando) enviarVideoEFechar();
+      };
+      videoRecorder.start();
     } catch (e) {
-      // Sem camera concedida ou navegador sem suporte: simplesmente nao mostra.
+      // Sem camera/sem suporte: video e best-effort, segue sem gravar.
+      videoRecorder = null;
+    }
+  }
+
+  // Redireciona para a finalizacao (ponto unico).
+  function finalizarRedirect() {
+    window.location = '/finalizacao';
+  }
+
+  // Encerramento da entrevista: se ha gravacao de video ativa, mostra "processando"
+  // e para o recorder (o onstop chama enviarVideoEFechar). Sem video, redireciona ja.
+  function encerrarComVideo() {
+    if (!videoRecorder || videoRecorder.state === 'inactive') {
+      finalizarRedirect();
+      return;
+    }
+    setOrbe('pensando');
+    estadoTexto.textContent = 'Processando sua gravação…';
+    elPergunta.textContent = 'Processando sua gravação de vídeo…';
+    try {
+      videoRecorder.stop();
+    } catch (e) {
+      finalizarRedirect();
+    }
+  }
+
+  // Monta o blob de video e o envia ao servidor; redireciona ao terminar (sucesso OU
+  // falha — a gravacao NUNCA bloqueia a finalizacao). Timeout generoso (~6 min) para
+  // o upload + Drive; se estourar, redireciona mesmo assim.
+  async function enviarVideoEFechar() {
+    VM_MIDIA.pararTracks(camStream);
+    camStream = null;
+
+    const tipo = videoRecorder && videoRecorder.mimeType ? videoRecorder.mimeType : 'video/webm';
+    const blob = new Blob(videoChunks, { type: tipo });
+    videoChunks = [];
+
+    if (!interviewId || !blob.size) {
+      finalizarRedirect();
+      return;
+    }
+
+    const ext = /mp4/.test(tipo) ? 'mp4' : 'webm';
+    const form = new FormData();
+    form.append('interview_id', interviewId);
+    form.append('video', blob, `entrevista.${ext}`);
+
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 6 * 60 * 1000);
+    try {
+      await fetch('/api/interview/video-upload', {
+        method: 'POST',
+        body: form,
+        signal: ctrl.signal,
+      });
+    } catch (e) {
+      // Best-effort: ignora qualquer erro de upload e segue para a finalizacao.
+    } finally {
+      clearTimeout(t);
+      finalizarRedirect();
     }
   }
 
@@ -733,7 +844,11 @@ const VM_MIDIA = {
     if (dados.encerrar) {
       encerrando = true;
       if (timerId) clearInterval(timerId);
-      window.location = '/finalizacao';
+      btnPtt.hidden = true;
+      btnRepetir.hidden = true;
+      // Para a gravacao de video e sobe ao servidor antes de redirecionar (o blob de
+      // video so existe nesta pagina; navegar antes o perderia). Sem video: vai direto.
+      encerrarComVideo();
       return;
     }
     elPergunta.textContent = dados.pergunta || '';
@@ -775,7 +890,7 @@ const VM_MIDIA = {
       // Retomada: o timer continua de onde estava (decorrido_ms do servidor).
       iniciarTimer(dados.decorrido_ms || 0);
       tocarFala(dados.audio_url);
-      talvezMostrarCamera();
+      iniciarVideo();
     } catch (e) {
       console.log('[DIAG-START] /start CATCH:', e && e.message);
       mostrarFalha('Tivemos um problema de conexão. Toque para tentar de novo.', iniciarEntrevista);

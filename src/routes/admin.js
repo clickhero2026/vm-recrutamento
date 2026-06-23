@@ -706,8 +706,9 @@ router.get('/uso', (req, res) => {
     </section>
 
     <p class="admin-rodape">
-      Os custos só são registrados em modo real (INTERVIEW_MOCK=false). Preços DeepSeek
-      V4-Flash (jun/2026): cache hit $0,0028 / cache miss $0,14 / output $0,28 por 1M tokens.
+      Os custos só são registrados em modo real (INTERVIEW_MOCK=false). Preços do modelo
+      deepseek-v4-flash (via OpenRouter, jun/2026): cache hit $0,0028 / cache miss $0,14 /
+      output $0,28 por 1M tokens.
     </p>`;
 
   res.send(paginaAdmin({ titulo: 'Custos / Uso da API', conteudo }));

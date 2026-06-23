@@ -248,7 +248,7 @@ async function gerarRelatorio(interviewId, deps = {}) {
     try {
       const custo = calcularCustoDeepSeek(resp && resp.uso);
       db.registrarUsoApi({
-        provedor: 'deepseek',
+        provedor: 'openrouter',
         modelo: resp && resp.modelo,
         origem: 'relatorio',
         interview_id: interviewId,

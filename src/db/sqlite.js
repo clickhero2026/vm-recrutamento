@@ -256,6 +256,13 @@ function finalizarInterview(id) {
     .run(id);
 }
 
+// Grava o link da gravacao de video (Google Drive) na entrevista (Fase 5).
+function definirVideoUrl(interviewId, url) {
+  getDb()
+    .prepare('UPDATE interviews SET video_url = ? WHERE id = ?')
+    .run(url || null, interviewId);
+}
+
 // Turnos da conversa
 function criarTurno(turno) {
   const info = getDb().prepare(`
@@ -524,6 +531,7 @@ module.exports = {
   obterInterviewEmAndamentoPorAplicacao,
   definirUltimoRespId,
   finalizarInterview,
+  definirVideoUrl,
   criarTurno,
   listarTurnos,
   contarTurnos,

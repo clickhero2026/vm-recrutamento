@@ -42,6 +42,7 @@ module.exports = {
   obterInterviewEmAndamentoPorAplicacao: driver.obterInterviewEmAndamentoPorAplicacao,
   definirUltimoRespId: driver.definirUltimoRespId,
   finalizarInterview: driver.finalizarInterview,
+  definirVideoUrl: driver.definirVideoUrl,
   criarTurno: driver.criarTurno,
   listarTurnos: driver.listarTurnos,
   contarTurnos: driver.contarTurnos,

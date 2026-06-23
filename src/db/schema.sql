@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS interviews (
   status         TEXT NOT NULL DEFAULT 'iniciada',
   iniciado_em    TEXT NOT NULL DEFAULT (datetime('now')),
   finalizado_em  TEXT,
-  ultimo_resp_id TEXT   -- id da ultima resposta processada (idempotencia: evita turnos duplicados em retry)
+  ultimo_resp_id TEXT,  -- id da ultima resposta processada (idempotencia: evita turnos duplicados em retry)
+  video_url      TEXT   -- (Fase 5) link compartilhavel da gravacao de video no Google Drive
 );
 
 -- Turnos da conversa (turno a turno)

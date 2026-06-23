@@ -14,7 +14,6 @@ const { config } = require('../../config');
 
 const adaptadores = {
   openrouter: () => require('./openrouter'),
-  deepseek: () => require('./deepseek'),
   anthropic: () => require('./anthropic'),
 };
 

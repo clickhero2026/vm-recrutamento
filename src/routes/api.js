@@ -6,6 +6,7 @@
 
 const express = require('express');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const multer = require('multer');
 
@@ -20,11 +21,14 @@ const llm = require('../providers/llm');
 const { calcularCustoDeepSeek } = require('../lib/custos');
 const stt = require('../providers/stt');
 const tts = require('../providers/tts');
+const drive = require('../providers/drive');
 
 const router = express.Router();
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // 25 MB (resposta de audio push-to-talk)
+const MAX_VIDEO_BYTES = 300 * 1024 * 1024; // 300 MB (gravacao da entrevista inteira)
+const VIDEO_UPLOAD_TIMEOUT_MS = 5 * 60 * 1000; // teto do upload ao Drive (~5 min)
 
 // Upload em memoria: validamos tipo/tamanho e so gravamos no disco depois de
 // gerar o token (o nome do arquivo e <token>.pdf).
@@ -55,6 +59,48 @@ const uploadAudio = multer({
     cb(null, true);
   },
 }).single('audio');
+
+// Upload da gravacao de VIDEO da entrevista (webm/mp4). Vai para DISCO temporario
+// (nao memoria): o arquivo e grande e e enviado ao Drive via stream, depois apagado.
+const uploadVideo = multer({
+  storage: multer.diskStorage({
+    destination: os.tmpdir(),
+    filename(req, file, cb) {
+      const ext = /mp4/.test(file.mimetype) ? 'mp4' : 'webm';
+      cb(null, `vm-video-${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`);
+    },
+  }),
+  limits: { fileSize: MAX_VIDEO_BYTES },
+  fileFilter(req, file, cb) {
+    if (!/^video\//.test(file.mimetype)) {
+      const erro = new Error('Formato de vídeo inválido.');
+      erro.code = 'TIPO_INVALIDO';
+      return cb(erro);
+    }
+    cb(null, true);
+  },
+}).single('video');
+
+// Remove um arquivo temporario sem nunca lancar (best-effort).
+function removerTemp(caminho) {
+  try {
+    if (caminho && fs.existsSync(caminho)) fs.unlinkSync(caminho);
+  } catch (e) {
+    console.error('[video-upload] falha ao remover arquivo temporário:', e.message);
+  }
+}
+
+// Nome legivel do arquivo no Drive: entrevista-<id>-<nome-do-candidato>.<ext>
+function nomeVideoDrive(candidato, interviewId, caminho) {
+  const ext = /\.mp4$/i.test(caminho) ? 'mp4' : 'webm';
+  const nome =
+    [candidato.nome, candidato.sobrenome]
+      .filter(Boolean)
+      .join('-')
+      .normalize('NFD')
+      .replace(/[^\w-]+/g, '') || 'candidato';
+  return `entrevista-${interviewId}-${nome}.${ext}`;
+}
 
 function emailValido(valor) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(valor);
@@ -606,7 +652,7 @@ router.post('/interview/answer', (req, res) => {
       try {
         const custo = calcularCustoDeepSeek(resposta.uso);
         db.registrarUsoApi({
-          provedor: 'deepseek',
+          provedor: 'openrouter',
           modelo: resposta.modelo,
           origem: 'entrevista',
           interview_id: interviewId,
@@ -765,6 +811,74 @@ router.get('/interview/audio-padrao/nao-ouvi.mp3', async (req, res) => {
     console.error('[interview/audio-padrao] erro:', e.message);
     return res.status(502).json({ ok: false, erro: 'Não foi possível gerar o áudio.' });
   }
+});
+
+// ── POST /api/interview/video-upload ── recebe a gravacao de video e sobe ao Drive
+// Best-effort: a feature de video NUNCA bloqueia a finalizacao. Qualquer falha (mock,
+// erro de upload, timeout) responde ok:true (uploaded:false) para o front so redirecionar.
+router.post('/interview/video-upload', (req, res) => {
+  uploadVideo(req, res, async (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ ok: false, erro: 'O vídeo da entrevista é muito grande.' });
+      }
+      if (err.code === 'TIPO_INVALIDO') {
+        return res.status(400).json({ ok: false, erro: err.message });
+      }
+      return res.status(400).json({ ok: false, erro: 'Não foi possível processar o vídeo.' });
+    }
+
+    const candidato = candidatoApi(req, res);
+    if (!candidato) {
+      if (req.file) removerTemp(req.file.path);
+      return undefined;
+    }
+
+    const interviewId = Number(req.body.interview_id);
+    const entrevistaRow = db.obterInterview(interviewId);
+    if (!entrevistaRow || entrevistaRow.application_id !== candidato.id) {
+      if (req.file) removerTemp(req.file.path);
+      return res.status(404).json({ ok: false, erro: 'Entrevista não encontrada.' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ ok: false, erro: 'Nenhum vídeo recebido.' });
+    }
+
+    // MODO MOCK: NAO toca o Drive (bloqueio de chamadas externas). Descarta o arquivo.
+    if (config.entrevista.mock) {
+      console.log(
+        `[video-upload] (mock) vídeo recebido p/ interview ${interviewId} (${req.file.size} bytes) — Drive NÃO acionado.`,
+      );
+      removerTemp(req.file.path);
+      return res.json({ ok: true, mock: true, uploaded: false });
+    }
+
+    // MODO REAL: sobe ao Drive (timeout ~5 min). Sucesso grava video_url; falha apenas
+    // loga (best-effort). Em todos os casos o arquivo temporario e removido no fim.
+    try {
+      const nomeArquivo = nomeVideoDrive(candidato, interviewId, req.file.path);
+      const { link } = await entrevista.comTimeout(
+        drive.enviarVideo({
+          caminho: req.file.path,
+          nomeArquivo,
+          mimeType: req.file.mimetype,
+        }),
+        VIDEO_UPLOAD_TIMEOUT_MS,
+        'Upload Drive',
+      );
+      db.definirVideoUrl(interviewId, link);
+      console.log(`[video-upload] vídeo da interview ${interviewId} salvo no Drive: ${link}`);
+      return res.json({ ok: true, uploaded: true, video_url: link });
+    } catch (e) {
+      console.error(
+        `[video-upload] falha ao subir o vídeo da interview ${interviewId} ao Drive: ${e.message}`,
+      );
+      return res.json({ ok: true, uploaded: false });
+    } finally {
+      removerTemp(req.file.path);
+    }
+  });
 });
 
 module.exports = router;

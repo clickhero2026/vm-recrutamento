@@ -19,7 +19,6 @@ const tts = require('../providers/tts');
 // Chave do provedor LLM selecionado (ou vazio se nao houver).
 function chaveLlm() {
   const p = config.provedores.llm;
-  if (p.nome === 'deepseek') return p.deepseek.apiKey;
   if (p.nome === 'openrouter') return p.openrouter.apiKey;
   if (p.nome === 'anthropic') return p.anthropic.apiKey;
   return '';

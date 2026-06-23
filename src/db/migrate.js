@@ -40,6 +40,9 @@ function migrar() {
   adicionarColunaSeFaltar('jobs', 'sobre_empresa', 'TEXT');
   adicionarColunaSeFaltar('jobs', 'ativo', 'INTEGER NOT NULL DEFAULT 1');
 
+  // Fase 5 - gravacao de video: link compartilhavel do Google Drive por entrevista.
+  adicionarColunaSeFaltar('interviews', 'video_url', 'TEXT');
+
   // Indices de reports ficam aqui (e nao no schema.sql) porque dependem das
   // colunas acima, que em bancos antigos so passam a existir depois do ADD COLUMN.
   const db = getDb();

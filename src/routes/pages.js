@@ -263,7 +263,7 @@ router.get('/preparacao', exigirCandidato, (req, res) => {
         <li>Escolha um ambiente silencioso, sem interrupções, com internet estável.</li>
         <li>É por áudio: use o botão <b>“toque para falar”</b> — toque para começar a responder e toque de novo para terminar cada resposta.</li>
         <li>Precisa de mais clareza? Peça à Vera para repetir a pergunta.</li>
-        <li>Permita o acesso ao microfone quando solicitado (a câmera é opcional).</li>
+        <li>Permita o acesso ao microfone quando solicitado. A câmera é opcional, mas, se permitida, sua entrevista será gravada em vídeo (imagem e áudio).</li>
         <li>Funciona no celular ou no computador.</li>
       </ul>
     </section>
@@ -271,7 +271,7 @@ router.get('/preparacao', exigirCandidato, (req, res) => {
     <p class="vm-aviso">Não atualize a página durante a entrevista.</p>
     <p class="vm-rodape-nota">Um link para esta entrevista também foi enviado ao seu e-mail.</p>
 
-    <p class="vm-consentimento">Esta entrevista é gravada em áudio e analisada para fins de avaliação no processo seletivo.</p>
+    <p class="vm-consentimento">Esta entrevista é gravada em áudio e, se você permitir a câmera, também em vídeo (imagem e áudio). As gravações são analisadas pela nossa equipe de recrutamento para fins de avaliação no processo seletivo.</p>
 
     ${botao('/permissao-microfone', 'Pode começar')}`;
 
@@ -309,19 +309,20 @@ router.get('/identificacao', (req, res) => {
 // quebrar links antigos (e-mail/marcador). O conteudo agora vive em /preparacao. ──
 router.get('/instrucoes', exigirCandidato, (req, res) => res.redirect(302, '/preparacao'));
 
-// ── Tela 6: Permissao de camera (opcional, so presenca — nao grava video) ──
+// ── Tela 6: Permissao de camera (opcional). Com a camera ligada, a entrevista e
+// GRAVADA em video para analise — o consentimento abaixo deixa isso explicito. ──
 router.get('/permissao-camera', exigirCandidato, (req, res) => {
   const conteudo = `
     <section class="vm-hero vm-hero--centro">
-      <p class="vm-kicker">Câmera (opcional)</p>
+      <p class="vm-kicker">Câmera</p>
       <h1 class="vm-title">Permissão de câmera</h1>
-      <p class="vm-lead">A câmera é opcional e serve apenas para confirmar sua presença. Não gravamos vídeo.</p>
+      <p class="vm-lead">Com a câmera ligada, sua entrevista é gravada em vídeo (imagem e áudio) e analisada pela nossa equipe de recrutamento como parte da avaliação. A câmera é opcional, mas recomendada.</p>
 
       <p class="vm-form-erro" data-cam-erro hidden role="alert"></p>
 
       <div class="vm-acoes">
-        <button type="button" class="vm-btn vm-btn--primario" data-permitir-camera>Permitir câmera</button>
-        <a class="vm-btn vm-btn--secundario" href="/permissao-microfone" data-pular>Pular câmera</a>
+        <button type="button" class="vm-btn vm-btn--primario" data-permitir-camera>Permitir câmera e gravar</button>
+        <a class="vm-btn vm-btn--secundario" href="/permissao-microfone" data-pular>Continuar sem câmera</a>
       </div>
 
       <p class="vm-rodape-nota">
@@ -332,23 +333,24 @@ router.get('/permissao-camera', exigirCandidato, (req, res) => {
   res.send(pagina({ titulo: 'Permissão de câmera', tema: 'claro', etapa: 3, conteudo }));
 });
 
-// ── Tela 7: Teste de camera (preview ao vivo, sem gravar) ──
+// ── Tela 7: Teste de camera (preview ao vivo). A gravacao em si comeca na entrevista;
+// aqui so confirmamos o enquadramento e reforcamos que havera gravacao em video. ──
 router.get('/teste-camera', exigirCandidato, (req, res) => {
   const conteudo = `
     <section class="vm-hero vm-hero--centro" data-tela-teste-camera>
-      <p class="vm-kicker">Câmera (opcional)</p>
+      <p class="vm-kicker">Câmera</p>
       <h1 class="vm-title">Confira sua câmera</h1>
 
       <div class="vm-video-wrap">
         <video data-preview-camera autoplay muted playsinline></video>
       </div>
 
-      <p class="vm-lead">Está tudo certo? Você aparece na imagem?</p>
+      <p class="vm-lead">Está tudo certo? Você aparece na imagem? Sua entrevista será gravada em vídeo a partir da próxima etapa, para análise da nossa equipe.</p>
       <p class="vm-form-erro" data-cam-erro hidden role="alert"></p>
 
       <div class="vm-acoes">
         <a class="vm-btn vm-btn--primario" href="/permissao-microfone" data-continuar>Continuar</a>
-        <a class="vm-btn vm-btn--secundario" href="/permissao-microfone" data-pular>Pular câmera</a>
+        <a class="vm-btn vm-btn--secundario" href="/permissao-microfone" data-pular>Continuar sem câmera</a>
       </div>
     </section>`;
 

@@ -79,14 +79,16 @@ const config = {
   // Os adaptadores reais so sao chamados quando INTERVIEW_MOCK=false.
   provedores: {
     llm: {
-      nome: process.env.LLM_PROVIDER || 'deepseek',
-      modelo: process.env.LLM_MODEL || '', // override global opcional
-      deepseek: {
-        apiKey: process.env.DEEPSEEK_API_KEY || '',
-        baseUrl: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
-        modelo: process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash',
+      nome: process.env.LLM_PROVIDER || 'openrouter',
+      // Dois modelos por tipo de tarefa (lidos do .env; fallback nos slugs padrao):
+      //   - complexo: geracao de perguntas da entrevista e relatorio (default das chamadas)
+      //   - simples:  tarefas leves (classificacao, validacao curta) — uso futuro
+      modeloComplexo: process.env.LLM_MODEL_COMPLEXO || 'deepseek/deepseek-v4-flash',
+      modeloSimples: process.env.LLM_MODEL_SIMPLES || 'deepseek/deepseek-chat-v3.1',
+      openrouter: {
+        apiKey: process.env.OPENROUTER_API_KEY || '',
+        baseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
       },
-      openrouter: { apiKey: process.env.OPENROUTER_API_KEY || '' },
       anthropic: { apiKey: process.env.ANTHROPIC_API_KEY || '' },
     },
     stt: {
@@ -107,6 +109,18 @@ const config = {
         credentialsPath: process.env.GOOGLE_APPLICATION_CREDENTIALS || '', // caminho do .json
       },
       openai: { apiKey: process.env.OPENAI_API_KEY || '' },
+    },
+    // Google Drive (Fase 5): destino das gravacoes de video das entrevistas.
+    // REAPROVEITA a credencial do TTS (mesma Service Account); o adaptador tenta o
+    // JSON inline primeiro e cai para o caminho do arquivo (ADC), igual ao TTS.
+    drive: {
+      credentialsJson: process.env.GOOGLE_TTS_CREDENTIALS_JSON || '',
+      credentialsPath: process.env.GOOGLE_APPLICATION_CREDENTIALS || '',
+      // Pasta-destino. Se GOOGLE_DRIVE_FOLDER_ID estiver definido, o adaptador usa esse
+      // id direto (caminho robusto: pasta pre-criada/compartilhada com a SA ou Shared
+      // Drive). Caso contrario, procura/cria uma pasta com este nome na 1a execucao.
+      pastaId: process.env.GOOGLE_DRIVE_FOLDER_ID || '',
+      pastaNome: process.env.GOOGLE_DRIVE_FOLDER_NAME || 'Entrevistas VM',
     },
     email: {
       nome: 'resend',
