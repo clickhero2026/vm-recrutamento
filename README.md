@@ -2,7 +2,7 @@
 
 Sistema web de recrutamento para perfis de vendas (**SDR** e **Closer**), com entrevista conduzida por um agente de IA por áudio chamado **Vera**. Ao final, gera um relatório por candidato e envia ao recrutador.
 
-> **Estado atual: Fase 0 (Fundação).** Base do projeto rodável e testável: servidor Express, banco SQLite com camada de dados agnóstica, layout base na identidade Vendedor Mestre e adaptadores (interfaces + *stubs*) para LLM, STT, TTS e e-mail. **A IA ainda não está implementada** (Fases 3 e 4).
+> **Estado atual: Fase 5 (Painel do recrutador + gravação de vídeo + hardening).** Funil completo, entrevista por áudio conduzida pela Vera, geração e envio do relatório, painel `/admin` (lista com filtros, relatórios, edição de roteiro/vaga, monitoramento de custo) e gravação de vídeo no Google Drive. **A IA está implementada e funcional** (LLM via OpenRouter, STT Groq, TTS Google); roda em modo *mock* por padrão (`INTERVIEW_MOCK=true`, custo zero) e em modo real com as chaves de API configuradas.
 
 Fontes da verdade: [`INSTRUCOES_PROJETO.md`](./INSTRUCOES_PROJETO.md) e [`PLANEJAMENTO_IMPLEMENTACAO.md`](./PLANEJAMENTO_IMPLEMENTACAO.md).
 
@@ -85,9 +85,10 @@ Scripts disponíveis:
     │   ├── schema.sql    # esquema (jobs, roteiros, applications, interviews, ...)
     │   └── seed.js       # 1 vaga SDR + 1 roteiro de exemplo
     ├── providers/        # adaptadores trocáveis por env (interfaces + stubs)
-    │   ├── llm/{index,openrouter,deepseek,anthropic}.js
+    │   ├── llm/{index,openrouter,anthropic}.js
     │   ├── stt/{index,groq,openai}.js
     │   ├── tts/{index,google,openai}.js
+    │   ├── drive/{index,google}.js   # destino das gravacoes de video (Fase 5)
     │   └── email/{index,resend}.js
     ├── routes/
     │   ├── pages.js      # 11 telas do funil (placeholders com layout base)
@@ -106,7 +107,7 @@ Cada serviço tem uma interface (`index.js`) que seleciona o provedor por env e 
 
 | Serviço | Variável | Opções | Padrão |
 |---|---|---|---|
-| LLM | `LLM_PROVIDER` | `openrouter` \| `deepseek` \| `anthropic` | `openrouter` |
+| LLM | `LLM_PROVIDER` | `openrouter` \| `anthropic` | `openrouter` |
 | STT | `STT_PROVIDER` | `groq` \| `openai` | `groq` |
 | TTS | `TTS_PROVIDER` | `google` \| `openai` | `google` |
 | E-mail | (fixo) | `resend` | `resend` |
@@ -123,15 +124,21 @@ O deploy é a partir do GitHub. O `Dockerfile` já está pronto (também compat�
 2. No EasyPanel, criar um **App service** apontando para o repositório GitHub (branch principal).
    - Build: o EasyPanel detecta o `Dockerfile` automaticamente.
 3. **Variáveis de ambiente** (Environment): preencher conforme `.env.example`.
-   - **Obrigatórias nesta fase:** `SESSION_SECRET` (um valor forte), `RECRUITER_EMAIL`.
-   - `DATABASE_PATH=/data/app.db` (aponta para o volume — veja abaixo).
+   - **Sempre obrigatórias:** `SESSION_SECRET` (um valor forte), `RECRUITER_EMAIL` e `ADMIN_SECRET` (vazio = painel `/admin` BLOQUEADO).
+   - `DATABASE_PATH=/data/app.db` já vem do `Dockerfile`; só precisa setar se usar build próprio.
    - `PORT` pode ficar no default `3000` (o EasyPanel mapeia para a porta pública).
-   - As chaves de API (LLM/STT/TTS/Resend) só são necessárias a partir das Fases 3/4.
-4. **Volume persistente:** criar um **Mount** em `/data`.
-   - ⚠️ **Sem isso o banco zera a cada redeploy.** O arquivo `app.db` vive nesse volume.
-5. **SSL:** ativar o certificado (Let's Encrypt) para o domínio.
-6. **Deploy.** Na inicialização, o app roda as migrações automaticamente e expõe `GET /health` — use essa rota como healthcheck.
-7. (Opcional) Rodar o seed uma vez no ambiente, via console do serviço: `npm run seed`.
+   - **Modo real** (`INTERVIEW_MOCK=false`): exige as chaves dos provedores em uso — `OPENROUTER_API_KEY` (LLM), `GROQ_API_KEY` (STT), credencial Google (`GOOGLE_TTS_CREDENTIALS_JSON` para TTS **e** Drive) e `RESEND_API_KEY` (e-mail). Em mock (`true`, default) nenhuma chave é necessária.
+4. **Volume persistente (SQLite):** criar um **Mount** em `/data`.
+   - O `Dockerfile` já declara `VOLUME ["/data"]` e aponta `DATABASE_PATH=/data/app.db`. Nesse volume também vivem `/data/curriculos` e `/data/entrevistas`.
+   - ⚠️ **Sem o mount o banco zera a cada redeploy.**
+   - ⚠️ **Rode UMA única instância.** O SQLite só admite um escritor por vez; não escale horizontalmente (réplicas corromperiam/concorreriam o `.db`). Escalar é o gatilho para migrar a Postgres.
+5. **Google Drive (gravação de vídeo, Fase 5):** a Service Account **não tem cota de storage própria** — ela não consegue criar pastas no "próprio" Drive. Antes do primeiro uso em produção:
+   - Pré-crie uma pasta (ex.: **"Entrevistas VM"**) numa conta humana do Google Drive **ou** num Shared Drive.
+   - Compartilhe essa pasta como **Editor** com o e-mail da Service Account (`client_email` do JSON da credencial).
+   - Copie o ID da pasta (da URL `drive.google.com/drive/folders/<ID>`) e defina `GOOGLE_DRIVE_FOLDER_ID`. Sem o ID, o app tenta procurar/criar pelo nome `GOOGLE_DRIVE_FOLDER_NAME` — o que **falha** numa SA sem Drive próprio.
+6. **SSL:** ativar o certificado (Let's Encrypt) para o domínio.
+7. **Deploy.** Na inicialização, o app roda as migrações automaticamente e expõe `GET /health` — use essa rota como healthcheck.
+8. (Opcional) Rodar o seed uma vez no ambiente, via console do serviço: `npm run seed`.
 
 **Backup:** copiar periodicamente o `app.db` do volume (cron ou backup do EasyPanel para S3). Escalar horizontalmente é o gatilho para migrar a Postgres (SQLite = um escritor por vez).
 
