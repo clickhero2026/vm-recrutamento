@@ -162,9 +162,61 @@ function parseAvaliacao(texto) {
   };
 }
 
-// Corpo do e-mail ao recrutador: resumo + tabela de pontuacoes + link p/ pagina completa.
-function montarEmailHtml({ candidato, vaga, avaliacao, token }) {
+// ── Score ponderado (Fase 5) — calculado ON-THE-FLY, sem coluna no banco ──
+// media = soma(nota_i * peso_i) / soma(peso_i). O peso vem do roteiro (casado por nome
+// de competencia). Retrocompat: peso ausente/nulo/invalido => 1. Itens sem nota numerica
+// (ex.: nota=null) nao entram na media. Retorna null quando nao ha nada pontuavel.
+function escalaMaxDe(roteiro) {
+  try {
+    const { rubrica } = normalizarEstrutura(roteiro);
+    const m = String(rubrica.escala || '').match(/(\d+)\s*$/);
+    if (m) return Number(m[1]);
+  } catch (e) {
+    /* sem roteiro/rubrica: usa o default */
+  }
+  return 5;
+}
+
+function calcularPontuacaoGeral(pontuacoes, roteiro) {
+  const lista = Array.isArray(pontuacoes) ? pontuacoes : [];
+
+  // mapa nome(normalizado) -> peso. peso invalido/ausente => 1.
+  const pesos = {};
+  try {
+    const { competencias } = normalizarEstrutura(roteiro);
+    for (const c of competencias) {
+      const p = Number(c.peso);
+      pesos[String(c.nome || '').trim().toLowerCase()] = Number.isFinite(p) && p > 0 ? p : 1;
+    }
+  } catch (e) {
+    /* roteiro ausente: todas as competencias caem no peso 1 (fallback abaixo) */
+  }
+
+  let somaPesoNota = 0;
+  let somaPeso = 0;
+  let consideradas = 0;
+  for (const item of lista) {
+    const nota = Number(item && item.nota);
+    if (!Number.isFinite(nota)) continue; // sem nota numerica: nao entra na media
+    const chave = String((item && item.competencia) || '').trim().toLowerCase();
+    const peso = pesos[chave] != null ? pesos[chave] : 1; // competencia fora do roteiro => 1
+    somaPesoNota += nota * peso;
+    somaPeso += peso;
+    consideradas++;
+  }
+  if (somaPeso <= 0 || consideradas === 0) return null;
+
+  return {
+    media: Number((somaPesoNota / somaPeso).toFixed(1)),
+    escalaMax: escalaMaxDe(roteiro),
+    consideradas,
+  };
+}
+
+// Corpo do e-mail ao recrutador: resumo + pontuacao geral + tabela + link p/ pagina completa.
+function montarEmailHtml({ candidato, vaga, avaliacao, token, roteiro }) {
   const link = `${config.baseUrl}/relatorio/${token}`;
+  const geral = calcularPontuacaoGeral(avaliacao.pontuacoes, roteiro);
   const linhas = avaliacao.pontuacoes
     .map(
       (p) =>
@@ -183,6 +235,14 @@ function montarEmailHtml({ candidato, vaga, avaliacao, token }) {
       <b>${escapeHtml(nomeDoCandidato(candidato))}</b> — ${escapeHtml((vaga && vaga.titulo) || 'vaga')}
     </p>
     <p>${escapeHtml(avaliacao.resumo)}</p>
+    ${
+      geral
+        ? `<p style="margin:12px 0;font-size:15px">
+             <b>Pontuação geral (ponderada):</b>
+             <span style="font-size:18px;font-weight:bold;color:#FF5500">${geral.media}</span> / ${geral.escalaMax}
+           </p>`
+        : ''
+    }
     <table style="border-collapse:collapse;width:100%;font-size:14px;margin:12px 0">
       <thead>
         <tr style="text-align:left;background:#f4f3f1">
@@ -279,7 +339,7 @@ async function gerarRelatorio(interviewId, deps = {}) {
   try {
     if (!destinatario) throw new Error('RECRUITER_EMAIL nao definido; nao ha para quem enviar.');
     const assunto = `Relatorio de entrevista — ${nomeDoCandidato(candidato)} (${(vaga && vaga.titulo) || 'vaga'})`;
-    const html = montarEmailHtml({ candidato, vaga, avaliacao, token });
+    const html = montarEmailHtml({ candidato, vaga, avaliacao, token, roteiro });
     if (mock) {
       console.log(
         `[relatorio] (mock) e-mail NAO enviado. destinatario=${destinatario} assunto="${assunto}" link=${config.baseUrl}/relatorio/${token}`,
@@ -302,4 +362,5 @@ module.exports = {
   parseAvaliacao,
   avaliacaoMock,
   montarEmailHtml,
+  calcularPontuacaoGeral,
 };

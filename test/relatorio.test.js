@@ -245,6 +245,10 @@ test('GET /relatorio/:token — quatro cenarios', async (t) => {
       assert.match(html, /Fulano de Teste/);
       assert.match(html, /Resiliência\/volume/); // acentuacao na tela
       assert.match(html, /Não abordada nesta entrevista/); // badge da competencia coberta=false
+      // Score ponderado (Fase 5): mock = notas 4 (cobertas) e 2 (ultima nao coberta);
+      // pesos do seed = 2,1,2,1 -> (4*2+4*1+4*2+2*1)/6 = 3.7 (≠ media simples 3.5).
+      assert.match(html, /Pontuação geral/);
+      assert.match(html, /3\.7/);
     });
 
     await t.test('pendente -> 200 "sendo processado"', async () => {

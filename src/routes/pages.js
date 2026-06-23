@@ -8,6 +8,7 @@ const express = require('express');
 const db = require('../db');
 const session = require('../lib/session');
 const entrevista = require('../lib/entrevista');
+const { calcularPontuacaoGeral } = require('../lib/relatorio');
 const { pagina, escapeHtml } = require('../views');
 
 const router = express.Router();
@@ -552,6 +553,10 @@ router.get('/relatorio/:token', (req, res) => {
   const candidato = interview ? db.obterAplicacao(interview.application_id) : null;
   const vaga = candidato ? db.obterVaga(candidato.job_id) : null;
   const perfil = (vaga && vaga.perfil) || (interview && interview.perfil) || '';
+  const roteiro = interview && interview.roteiro_id ? db.obterRoteiro(interview.roteiro_id) : null;
+
+  // Score ponderado calculado on-the-fly (sem coluna no banco).
+  const geral = calcularPontuacaoGeral(report.pontuacoes, roteiro);
 
   const comps = (report.pontuacoes || [])
     .map((p) => {
@@ -587,6 +592,20 @@ router.get('/relatorio/:token', (req, res) => {
           ? `<section class="vm-secao">
               <h2 class="vm-h2">Resumo</h2>
               <div class="vm-card"><p>${escapeHtml(report.resumo)}</p></div>
+            </section>`
+          : ''
+      }
+
+      ${
+        geral
+          ? `<section class="vm-secao">
+              <h2 class="vm-h2">Pontuação geral</h2>
+              <div class="vm-card">
+                <p style="margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:900;font-size:2.4rem;line-height:1;color:#FF5500">
+                  ${escapeHtml(String(geral.media))}<span style="font-size:1.1rem;color:inherit"> / ${escapeHtml(String(geral.escalaMax))}</span>
+                </p>
+                <p class="vm-rel-just" style="margin:.4rem 0 0">Média ponderada pelo peso de cada competência.</p>
+              </div>
             </section>`
           : ''
       }

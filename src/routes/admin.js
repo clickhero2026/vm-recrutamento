@@ -11,6 +11,7 @@
 const express = require('express');
 const { config } = require('../config');
 const db = require('../db');
+const { calcularPontuacaoGeral } = require('../lib/relatorio');
 const { escapeHtml } = require('../views');
 
 const router = express.Router();
@@ -264,6 +265,10 @@ router.get('/relatorio/:interviewId', (req, res) => {
   const vaga = candidato ? db.obterVaga(candidato.job_id) : null;
   const perfil = (vaga && vaga.perfil) || interview.perfil || '—';
   const turns = db.listarTurnos(interviewId);
+  const roteiro = interview.roteiro_id ? db.obterRoteiro(interview.roteiro_id) : null;
+
+  // Score ponderado calculado on-the-fly (sem coluna no banco).
+  const geral = calcularPontuacaoGeral(report.pontuacoes, roteiro);
 
   // Pontuacoes (array de { competencia, nota, justificativa, coberta }) — coberta vem
   // de dentro do JSON, nao de coluna.
@@ -315,6 +320,20 @@ router.get('/relatorio/:interviewId', (req, res) => {
     </section>
 
     ${report.resumo ? `<section class="rel-sec"><h2>Resumo</h2><p>${escapeHtml(report.resumo)}</p></section>` : ''}
+
+    ${
+      geral
+        ? `<section class="rel-sec">
+            <h2>Pontuação geral</h2>
+            <div class="comp">
+              <div class="comp-cab">
+                <span style="color:var(--cinza);text-transform:uppercase;font-size:.8rem;">Média ponderada pelo peso das competências</span>
+                <span class="comp-nota">${escapeHtml(String(geral.media))}<small>/${escapeHtml(String(geral.escalaMax))}</small></span>
+              </div>
+            </div>
+          </section>`
+        : ''
+    }
 
     <section class="rel-sec">
       <h2>Pontuação por competência</h2>
