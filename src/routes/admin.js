@@ -81,6 +81,11 @@ const ESTILO_ADMIN = `
   .btn--off { background:var(--linha); color:var(--cinza); pointer-events:none; }
   .btn--ghost { background:transparent; color:var(--offwhite); border:1px solid var(--linha); }
   .admin-rodape { margin-top:1.5rem; padding-top:1rem; border-top:1px solid var(--linha); color:var(--cinza); font-size:.9rem; }
+  .admin-filtros { display:flex; gap:.75rem; align-items:flex-end; flex-wrap:wrap; margin-bottom:1.25rem; }
+  .admin-filtros .filtro { display:flex; flex-direction:column; gap:.25rem; }
+  .admin-filtros .filtro > span { color:var(--cinza); font-size:.8rem; text-transform:uppercase; }
+  .admin-filtros select, .admin-filtros input[type=date] { background:var(--campo); color:var(--offwhite); border:1px solid var(--linha); border-radius:6px; padding:.5rem .6rem; font:inherit; }
+  .admin-filtros select:focus, .admin-filtros input[type=date]:focus { outline:none; border-color:var(--laranja); }
   .rel-sec { margin:1.5rem 0; }
   .rel-id { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:.5rem 1.5rem; }
   .rel-id dt { color:var(--cinza); font-size:.8rem; text-transform:uppercase; }
@@ -185,9 +190,17 @@ function fmtUsd8(n) {
   return `$${Number(n || 0).toFixed(8)}`;
 }
 
-// ── GET /admin ── lista de candidatos ──
+// ── GET /admin ── lista de candidatos (com filtros por status e data, via query string) ──
 router.get('/', (req, res) => {
-  const candidatos = db.listarAplicacoesComContexto();
+  const q = req.query || {};
+  // Saneamento: status so vale se for um dos valores conhecidos; datas no formato YYYY-MM-DD.
+  const STATUS_VALIDOS = ['aplicado', 'em_entrevista', 'concluido'];
+  const status = STATUS_VALIDOS.includes(q.status) ? q.status : '';
+  const ehData = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
+  const dataDe = ehData(q.de) ? q.de : '';
+  const dataAte = ehData(q.ate) ? q.ate : '';
+
+  const candidatos = db.listarAplicacoesComContexto({ status, dataDe, dataAte });
 
   const linhas = candidatos
     .map((c) => {
@@ -195,6 +208,9 @@ router.get('/', (req, res) => {
       const acao = podeVerRelatorio
         ? `<a class="btn" href="/admin/relatorio/${c.report_interview_id}">Ver relatório</a>`
         : `<span class="btn btn--off">Ver relatório</span>`;
+      const video = c.video_url
+        ? `<a href="${escapeHtml(c.video_url)}" target="_blank" rel="noopener noreferrer">Abrir</a>`
+        : '—';
       return `
         <tr>
           <td>${escapeHtml(nomeCompleto(c))}</td>
@@ -203,6 +219,7 @@ router.get('/', (req, res) => {
           <td>${escapeHtml(c.vaga_titulo || '—')}</td>
           <td>${badgeStatus(c.status)}</td>
           <td>${escapeHtml(formatarDataHora(c.criado_em))}</td>
+          <td>${video}</td>
           <td>${acao}</td>
         </tr>`;
     })
@@ -210,6 +227,31 @@ router.get('/', (req, res) => {
 
   const totalCandidatos = db.contarAplicacoes();
   const totalConcluidas = db.contarEntrevistasConcluidas();
+
+  const sel = (v) => (status === v ? ' selected' : '');
+  const temFiltro = status || dataDe || dataAte;
+  const filtros = `
+    <form method="GET" action="/admin" class="admin-filtros">
+      <label class="filtro">
+        <span>Status</span>
+        <select name="status">
+          <option value=""${status ? '' : ' selected'}>Todos</option>
+          <option value="aplicado"${sel('aplicado')}>Aplicado</option>
+          <option value="em_entrevista"${sel('em_entrevista')}>Em entrevista</option>
+          <option value="concluido"${sel('concluido')}>Concluído</option>
+        </select>
+      </label>
+      <label class="filtro">
+        <span>De</span>
+        <input type="date" name="de" value="${escapeHtml(dataDe)}">
+      </label>
+      <label class="filtro">
+        <span>Até</span>
+        <input type="date" name="ate" value="${escapeHtml(dataAte)}">
+      </label>
+      <button type="submit" class="btn">Filtrar</button>
+      ${temFiltro ? '<a class="btn btn--ghost" href="/admin">Limpar</a>' : ''}
+    </form>`;
 
   const conteudo = `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;">
@@ -220,16 +262,17 @@ router.get('/', (req, res) => {
         <a class="btn btn--ghost" href="/admin/uso">Custos / Uso API</a>
       </div>
     </div>
+    ${filtros}
     <div class="admin-tab-scroll">
       <table class="admin-tab">
         <thead>
           <tr>
             <th>Nome</th><th>E-mail</th><th>Telefone</th><th>Vaga</th>
-            <th>Status</th><th>Criado em</th><th>Ação</th>
+            <th>Status</th><th>Criado em</th><th>Vídeo</th><th>Ação</th>
           </tr>
         </thead>
         <tbody>
-          ${linhas || '<tr><td colspan="7">Nenhum candidato ainda.</td></tr>'}
+          ${linhas || `<tr><td colspan="8">${temFiltro ? 'Nenhum candidato para os filtros aplicados.' : 'Nenhum candidato ainda.'}</td></tr>`}
         </tbody>
       </table>
     </div>

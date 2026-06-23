@@ -361,10 +361,31 @@ function obterReportEnviadoPorInterview(interviewId) {
 // Painel do recrutador (Fase 5)
 // ──────────────────────────────────────────────────────────────
 
-// Lista TODAS as aplicacoes com o contexto que o painel precisa: titulo da vaga,
-// a ultima entrevista da aplicacao e, se houver, o interview_id do ultimo relatorio
-// gerado (para habilitar/linkar o botao "Ver relatorio"). Ordena por criado_em DESC.
-function listarAplicacoesComContexto() {
+// Lista as aplicacoes com o contexto que o painel precisa: titulo da vaga, video_url
+// da ultima entrevista, a ultima entrevista da aplicacao e, se houver, o interview_id
+// do ultimo relatorio gerado (para habilitar/linkar o botao "Ver relatorio").
+// Ordena por criado_em DESC. Filtros opcionais (Fase 5, inc 5):
+//   status -> filtra a.status (so um dos valores validos; ignorado caso contrario)
+//   dataDe / dataAte -> intervalo INCLUSIVO sobre a data (YYYY-MM-DD) de a.criado_em
+function listarAplicacoesComContexto({ status, dataDe, dataAte } = {}) {
+  const where = [];
+  const params = [];
+
+  if (status === 'aplicado' || status === 'em_entrevista' || status === 'concluido') {
+    where.push('a.status = ?');
+    params.push(status);
+  }
+  if (dataDe) {
+    where.push('date(a.criado_em) >= date(?)');
+    params.push(dataDe);
+  }
+  if (dataAte) {
+    where.push('date(a.criado_em) <= date(?)');
+    params.push(dataAte);
+  }
+
+  const clausula = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
   return getDb()
     .prepare(
       `SELECT
@@ -372,14 +393,17 @@ function listarAplicacoesComContexto() {
          j.titulo AS vaga_titulo,
          (SELECT i.id FROM interviews i
             WHERE i.application_id = a.id ORDER BY i.id DESC LIMIT 1) AS interview_id,
+         (SELECT i3.video_url FROM interviews i3
+            WHERE i3.application_id = a.id ORDER BY i3.id DESC LIMIT 1) AS video_url,
          (SELECT r.interview_id FROM reports r
             JOIN interviews i2 ON i2.id = r.interview_id
             WHERE i2.application_id = a.id ORDER BY r.id DESC LIMIT 1) AS report_interview_id
        FROM applications a
        LEFT JOIN jobs j ON j.id = a.job_id
+       ${clausula}
        ORDER BY a.criado_em DESC`,
     )
-    .all();
+    .all(...params);
 }
 
 // Ultimo relatorio de uma entrevista, em QUALQUER status (o painel mostra mesmo
