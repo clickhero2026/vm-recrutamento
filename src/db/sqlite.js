@@ -131,6 +131,15 @@ function atualizarVaga(id, campos) {
     });
 }
 
+// Encerra (ativo=0) ou reativa (ativo=1) uma vaga, sem tocar nos demais campos.
+// Usado pelos botoes Encerrar/Reativar da listagem de vagas (Fase 5).
+function definirVagaAtiva(id, ativo) {
+  const info = getDb()
+    .prepare('UPDATE jobs SET ativo = ? WHERE id = ?')
+    .run(ativo ? 1 : 0, id);
+  return info.changes;
+}
+
 // Roteiros
 function obterRoteiro(id) {
   return roteiroDeLinha(getDb().prepare('SELECT * FROM roteiros WHERE id = ?').get(id));
@@ -528,6 +537,7 @@ module.exports = {
   listarVagas,
   criarVaga,
   atualizarVaga,
+  definirVagaAtiva,
   // painel (Fase 5)
   listarAplicacoesComContexto,
   obterReportPorInterview,
