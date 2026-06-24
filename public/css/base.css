@@ -438,6 +438,17 @@ html.tema-escuro .vm-aviso{ background:color-mix(in srgb, var(--vm-white) 6%, tr
 /* Linha de consentimento (gravacao em audio) — ponto de consentimento, leve destaque */
 .vm-consentimento{ color:var(--vm-orange); font-weight:600; font-size:.85rem; max-width:60ch; }
 
+/* Checkbox de aceite (LGPD) — label clicavel, alvo grande p/ mobile, identidade VM */
+.vm-aceite{
+  display:flex; align-items:flex-start; gap:.6rem; cursor:pointer;
+  margin:1rem 0; max-width:60ch; font-size:.9rem; line-height:1.4; text-align:left;
+}
+.vm-aceite input[type=checkbox]{
+  flex:0 0 auto; width:1.4rem; height:1.4rem; margin-top:.05rem;
+  accent-color:var(--vm-orange); cursor:pointer;
+}
+.vm-aceite span{ flex:1 1 auto; }
+
 /* Painel de regras (Instrucoes, tema escuro) */
 .vm-painel-regras{ width:100%; }
 .vm-regras{ list-style:none; counter-reset:regra; display:flex; flex-direction:column; gap:.9rem; margin-top:.75rem; }

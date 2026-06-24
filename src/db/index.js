@@ -35,6 +35,7 @@ module.exports = {
   obterAplicacao: driver.obterAplicacao,
   obterAplicacaoPorToken: driver.obterAplicacaoPorToken,
   atualizarStatusAplicacao: driver.atualizarStatusAplicacao,
+  registrarConsentGravacao: driver.registrarConsentGravacao,
 
   // entrevistas
   criarInterview: driver.criarInterview,

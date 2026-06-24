@@ -168,6 +168,15 @@ router.post('/aplicacao', (req, res) => {
       if (!req.file) {
         return res.status(400).json({ ok: false, erro: 'Anexe seu currículo em PDF.' });
       }
+      // Consentimento LGPD (obrigatorio): o checkbox da tela de aplicacao. A validacao
+      // do front e so conveniencia; aqui e a barreira de verdade.
+      const consentiu = ['on', '1', 'true'].includes(String(b.consentimento || '').toLowerCase());
+      if (!consentiu) {
+        return res.status(400).json({
+          ok: false,
+          erro: 'É necessário aceitar a coleta e uso dos seus dados para se candidatar.',
+        });
+      }
 
       // Resolve a vaga (pelo slug enviado; senao, a vaga ativa)
       const slug = String(b.slug || '').trim();
@@ -222,6 +231,27 @@ router.post('/aplicacao', (req, res) => {
         .json({ ok: false, erro: 'Erro interno ao registrar a candidatura. Tente novamente.' });
     }
   });
+});
+
+// ── POST /api/consentimento-gravacao ──
+// Registra o aceite dos termos de gravacao (LGPD) no avanco do teste de microfone.
+// O front chama antes de navegar para /entrevista (o "Continuar" so habilita com o
+// checkbox marcado). Idempotente no banco: preserva o 1o aceite.
+router.post('/consentimento-gravacao', (req, res) => {
+  const candidato = candidatoApi(req, res);
+  if (!candidato) return undefined;
+
+  const b = req.body || {};
+  const consentiu = ['on', '1', 'true'].includes(String(b.consentimento || '').toLowerCase());
+  if (!consentiu) {
+    return res.status(400).json({
+      ok: false,
+      erro: 'É necessário aceitar os termos de gravação para continuar.',
+    });
+  }
+
+  db.registrarConsentGravacao(candidato.id);
+  return res.json({ ok: true });
 });
 
 // ── POST /api/identificacao ──
