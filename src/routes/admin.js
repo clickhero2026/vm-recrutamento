@@ -107,6 +107,12 @@ const ESTILO_ADMIN = `
   .campo input[type=text]:focus, .campo textarea:focus { outline:none; border-color:var(--laranja); }
   .campo-check { display:flex; align-items:center; gap:.5rem; margin-bottom:1.2rem; }
   .aviso-ok { background:var(--linha); border-left:3px solid var(--laranja); padding:.6rem .9rem; border-radius:4px; margin-bottom:1rem; }
+  .aviso-alerta { background:var(--campo); border:1px solid var(--laranja); border-left:4px solid var(--laranja); color:var(--offwhite); padding:.6rem .9rem; border-radius:4px; margin-bottom:1rem; font-size:.92rem; }
+  .badge--ativa { background:var(--laranja); color:var(--preto); }
+  .badge--encerrada { background:var(--linha); color:var(--cinza); }
+  .tag-aviso { display:inline-block; font-size:.72rem; font-weight:700; color:var(--laranja); border:1px solid var(--laranja); padding:.05rem .4rem; border-radius:4px; margin-left:.4rem; white-space:nowrap; }
+  .acoes-linha { display:flex; gap:.4rem; align-items:center; }
+  .acoes-linha form { margin:0; display:inline; }
   .campo input[type=number] { width:6rem; background:var(--campo); color:var(--offwhite); border:1px solid var(--linha); border-radius:6px; padding:.6rem .7rem; font:inherit; }
   .campo input[type=number]:focus { outline:none; border-color:var(--laranja); }
   .bloco-card { border:1px solid var(--linha); border-radius:8px; padding:.2rem 1rem; margin-bottom:.7rem; }
@@ -257,7 +263,7 @@ router.get('/', (req, res) => {
     <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;">
       <h1 style="margin:0;">Candidatos</h1>
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
-        <a class="btn btn--ghost" href="/admin/vaga">Editar vaga</a>
+        <a class="btn btn--ghost" href="/admin/vagas">Vagas</a>
         <a class="btn btn--ghost" href="/admin/roteiro">Editar roteiro</a>
         <a class="btn btn--ghost" href="/admin/uso">Custos / Uso API</a>
       </div>
@@ -403,84 +409,228 @@ router.get('/relatorio/:interviewId', (req, res) => {
   res.send(paginaAdmin({ titulo: `Relatório — ${nomeCand}`, conteudo }));
 });
 
-// Resolve a vaga a editar: a ativa (primeira com ativo=1) ou, na falta, a de id=1.
-function vagaParaEditar() {
-  return db.obterVagaAtiva() || db.obterVaga(1) || null;
+// ── Gestao de multiplas vagas (Fase 5) ──
+
+const PERFIS_VALIDOS = ['SDR', 'CLOSER'];
+
+// Gera um slug-base a partir do titulo: sem acentos, minusculo, so [a-z0-9-].
+function gerarSlugBase(titulo) {
+  const base = String(titulo || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // remove diacriticos (acentos)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+  return base || 'vaga';
 }
 
-// ── GET /admin/vaga ── formulario de edicao da vaga ──
-router.get('/vaga', (req, res) => {
-  const vaga = vagaParaEditar();
-
-  if (!vaga) {
-    return res.send(
-      paginaAdmin({
-        titulo: 'Editar vaga',
-        conteudo: `
-          <p><a class="btn btn--ghost" href="/admin">← Voltar ao painel</a></p>
-          <section class="rel-sec"><h1>Editar vaga</h1><p>Nenhuma vaga cadastrada.</p></section>`,
-      }),
-    );
+// Garante unicidade do slug (coluna UNIQUE): se ja existir, anexa -2, -3, ...
+function gerarSlugUnico(titulo) {
+  const base = gerarSlugBase(titulo);
+  let slug = base;
+  let n = 2;
+  while (db.obterVagaPorSlug(slug)) {
+    slug = `${base}-${n}`;
+    n += 1;
   }
+  return slug;
+}
 
-  const salvo = req.query.salvo === '1'
-    ? '<p class="aviso-ok">Alterações salvas.</p>'
-    : '';
+// Aviso (decisao: roteiro_id NULL e permitido) exibido na listagem/edicao de vagas
+// cujo perfil ainda nao tem roteiro vinculado — a entrevista nao roda sem ele.
+function avisoRoteiroFaltando(vaga) {
+  if (vaga.roteiro_id) return '';
+  return `<p class="aviso-alerta">Esta vaga não tem roteiro cadastrado — a entrevista
+    não funcionará até que um roteiro ${escapeHtml(vaga.perfil)} seja criado e vinculado.</p>`;
+}
+
+// Campos do formulario de vaga (compartilhados entre criar e editar). No modo "novo"
+// o perfil e um <select> (define o roteiro vinculado); no modo "editar" o perfil e
+// apenas exibido (atualizarVaga nao mexe em perfil/roteiro_id/slug).
+function camposVagaHtml(vaga, { perfilEditavel }) {
+  const perfilCampo = perfilEditavel
+    ? `<label class="campo">
+        <span>Perfil</span>
+        <select name="perfil">
+          ${PERFIS_VALIDOS.map(
+            (p) => `<option value="${p}"${vaga.perfil === p ? ' selected' : ''}>${p}</option>`,
+          ).join('')}
+        </select>
+      </label>`
+    : `<label class="campo">
+        <span>Perfil</span>
+        <input type="text" value="${escapeHtml(vaga.perfil || '')}" disabled>
+      </label>`;
+
+  return `
+    <label class="campo">
+      <span>Título da vaga</span>
+      <input type="text" name="titulo" value="${escapeHtml(vaga.titulo || '')}" required>
+    </label>
+
+    ${perfilCampo}
+
+    <label class="campo">
+      <span>Faixa de pagamento</span>
+      <input type="text" name="faixa_pagamento" value="${escapeHtml(vaga.faixa_pagamento || '')}" placeholder="R$ 3.000 – R$ 6.000 + comissão">
+    </label>
+
+    <label class="campo">
+      <span>Descrição da vaga</span>
+      <textarea name="descricao" rows="6">${escapeHtml(vaga.descricao || '')}</textarea>
+    </label>
+
+    <label class="campo">
+      <span>Sobre a empresa</span>
+      <textarea name="sobre_empresa" rows="4">${escapeHtml(vaga.sobre_empresa || '')}</textarea>
+    </label>
+
+    <label class="campo-check">
+      <input type="checkbox" name="ativo" value="1"${vaga.ativo ? ' checked' : ''}>
+      <span style="color:var(--offwhite);text-transform:none;">Vaga ativa</span>
+    </label>`;
+}
+
+// ── GET /admin/vagas ── listagem de todas as vagas ──
+router.get('/vagas', (req, res) => {
+  const vagas = db.listarVagas();
+  const salvo = req.query.salvo === '1' ? '<p class="aviso-ok">Vaga salva.</p>' : '';
+
+  const linhas = vagas
+    .map((v) => {
+      const badge = v.ativo
+        ? '<span class="badge badge--ativa">Ativa</span>'
+        : '<span class="badge badge--encerrada">Encerrada</span>';
+      const semRoteiro = v.roteiro_id ? '' : '<span class="tag-aviso">⚠ sem roteiro</span>';
+      const toggle = v.ativo
+        ? `<form method="POST" action="/admin/vagas/${v.id}/encerrar"><button type="submit" class="btn btn--ghost">Encerrar</button></form>`
+        : `<form method="POST" action="/admin/vagas/${v.id}/reativar"><button type="submit" class="btn">Reativar</button></form>`;
+      return `
+        <tr>
+          <td>${escapeHtml(v.titulo)}${semRoteiro}</td>
+          <td>${escapeHtml(v.perfil)}</td>
+          <td>${badge}</td>
+          <td>${formatarDataHora(v.criado_em)}</td>
+          <td>
+            <div class="acoes-linha">
+              <a class="btn btn--ghost" href="/admin/vagas/${v.id}">Editar</a>
+              ${toggle}
+            </div>
+          </td>
+        </tr>`;
+    })
+    .join('');
 
   const conteudo = `
     <p><a class="btn btn--ghost" href="/admin">← Voltar ao painel</a></p>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;">
+      <h1 style="margin:0;">Vagas</h1>
+      <a class="btn" href="/admin/vagas/nova">+ Nova vaga</a>
+    </div>
+    ${salvo}
+    <div class="admin-tab-scroll">
+      <table class="admin-tab">
+        <thead>
+          <tr><th>Título</th><th>Perfil</th><th>Status</th><th>Criada em</th><th>Ações</th></tr>
+        </thead>
+        <tbody>
+          ${linhas || '<tr><td colspan="5">Nenhuma vaga cadastrada.</td></tr>'}
+        </tbody>
+      </table>
+    </div>`;
+
+  res.send(paginaAdmin({ titulo: 'Vagas', conteudo }));
+});
+
+// ── GET /admin/vagas/nova ── formulario de criacao (antes de /:id p/ nao casar como id) ──
+router.get('/vagas/nova', (req, res) => {
+  const erro = req.query.erro === 'titulo'
+    ? '<p class="aviso-alerta">O título da vaga não pode ficar vazio.</p>'
+    : '';
+
+  const conteudo = `
+    <p><a class="btn btn--ghost" href="/admin/vagas">← Voltar às vagas</a></p>
+    <h1>Nova vaga</h1>
+    ${erro}
+    <form method="POST" action="/admin/vagas">
+      ${camposVagaHtml({ ativo: true, perfil: 'CLOSER' }, { perfilEditavel: true })}
+      <p style="color:var(--cinza);font-size:.85rem;margin-top:-.5rem;">
+        O roteiro de entrevista é vinculado automaticamente pelo perfil escolhido.</p>
+      <button type="submit" class="btn">Criar vaga</button>
+    </form>`;
+
+  res.send(paginaAdmin({ titulo: 'Nova vaga', conteudo }));
+});
+
+// ── POST /admin/vagas ── cria nova vaga ──
+router.post('/vagas', (req, res) => {
+  const b = req.body || {};
+  const titulo = String(b.titulo || '').trim();
+  if (!titulo) {
+    return res.redirect('/admin/vagas/nova?erro=titulo');
+  }
+
+  const perfil = PERFIS_VALIDOS.includes(b.perfil) ? b.perfil : 'CLOSER';
+  // Decisao: roteiro_id pode ficar NULL (perfil sem roteiro cadastrado).
+  const roteiro = db.obterRoteiroPorPerfil(perfil);
+
+  const id = db.criarVaga({
+    slug: gerarSlugUnico(titulo),
+    titulo,
+    perfil,
+    faixa_pagamento: String(b.faixa_pagamento || '').trim(),
+    descricao: String(b.descricao || '').trim(),
+    sobre_empresa: String(b.sobre_empresa || '').trim(),
+    roteiro_id: roteiro ? roteiro.id : null,
+    skills: [],
+    ativo: b.ativo === '1' || b.ativo === 'on',
+  });
+
+  res.redirect(`/admin/vagas/${id}?salvo=1`);
+});
+
+// ── GET /admin/vagas/:id ── formulario de edicao de uma vaga ──
+router.get('/vagas/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const vaga = Number.isInteger(id) ? db.obterVaga(id) : null;
+  if (!vaga) {
+    return res.status(404).send(paginaErroAdmin('Vaga não encontrada.'));
+  }
+
+  const salvo = req.query.salvo === '1' ? '<p class="aviso-ok">Alterações salvas.</p>' : '';
+
+  const conteudo = `
+    <p><a class="btn btn--ghost" href="/admin/vagas">← Voltar às vagas</a></p>
     <h1>Editar vaga</h1>
     ${salvo}
-    <form method="POST" action="/admin/vaga">
-      <input type="hidden" name="id" value="${escapeHtml(String(vaga.id))}">
-
-      <label class="campo">
-        <span>Título da vaga</span>
-        <input type="text" name="titulo" value="${escapeHtml(vaga.titulo || '')}" required>
-      </label>
-
-      <label class="campo">
-        <span>Faixa de pagamento</span>
-        <input type="text" name="faixa_pagamento" value="${escapeHtml(vaga.faixa_pagamento || '')}" placeholder="R$ 3.000 – R$ 6.000 + comissão">
-      </label>
-
-      <label class="campo">
-        <span>Descrição da vaga</span>
-        <textarea name="descricao" rows="6">${escapeHtml(vaga.descricao || '')}</textarea>
-      </label>
-
-      <label class="campo">
-        <span>Sobre a empresa</span>
-        <textarea name="sobre_empresa" rows="4">${escapeHtml(vaga.sobre_empresa || '')}</textarea>
-      </label>
-
-      <label class="campo-check">
-        <input type="checkbox" name="ativo" value="1"${vaga.ativo ? ' checked' : ''}>
-        <span style="color:var(--offwhite);text-transform:none;">Vaga ativa</span>
-      </label>
-
+    ${avisoRoteiroFaltando(vaga)}
+    <p style="color:var(--cinza);font-size:.85rem;">
+      Link público: <a href="/vaga/${escapeHtml(vaga.slug)}" target="_blank" rel="noopener noreferrer">/vaga/${escapeHtml(vaga.slug)}</a></p>
+    <form method="POST" action="/admin/vagas/${vaga.id}">
+      ${camposVagaHtml(vaga, { perfilEditavel: false })}
       <button type="submit" class="btn">Salvar alterações</button>
     </form>`;
 
   res.send(paginaAdmin({ titulo: 'Editar vaga', conteudo }));
 });
 
-// ── POST /admin/vaga ── salva as alteracoes ──
-router.post('/vaga', (req, res) => {
-  const b = req.body || {};
-  const id = Number(b.id);
-  const titulo = String(b.titulo || '').trim();
-
-  const vaga = Number.isFinite(id) ? db.obterVaga(id) : null;
+// ── POST /admin/vagas/:id ── salva alteracoes (titulo/faixa/descricao/sobre/ativo) ──
+router.post('/vagas/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const vaga = Number.isInteger(id) ? db.obterVaga(id) : null;
   if (!vaga) {
     return res.status(404).send(paginaErroAdmin('Vaga não encontrada.'));
   }
+
+  const b = req.body || {};
+  const titulo = String(b.titulo || '').trim();
   if (!titulo) {
     return res.status(400).send(
       paginaAdmin({
         titulo: 'Editar vaga',
         conteudo: `
-          <p><a class="btn btn--ghost" href="/admin/vaga">← Voltar</a></p>
+          <p><a class="btn btn--ghost" href="/admin/vagas/${vaga.id}">← Voltar</a></p>
           <section class="rel-sec"><h1>Editar vaga</h1>
             <p>O título da vaga não pode ficar vazio.</p></section>`,
       }),
@@ -495,7 +645,26 @@ router.post('/vaga', (req, res) => {
     ativo: b.ativo === '1' || b.ativo === 'on',
   });
 
-  res.redirect('/admin/vaga?salvo=1');
+  res.redirect(`/admin/vagas/${id}?salvo=1`);
+});
+
+// ── POST /admin/vagas/:id/encerrar e /reativar ── alterna o campo ativo ──
+router.post('/vagas/:id/encerrar', (req, res) => {
+  const id = Number(req.params.id);
+  if (Number.isInteger(id)) db.definirVagaAtiva(id, false);
+  res.redirect('/admin/vagas');
+});
+
+router.post('/vagas/:id/reativar', (req, res) => {
+  const id = Number(req.params.id);
+  if (Number.isInteger(id)) db.definirVagaAtiva(id, true);
+  res.redirect('/admin/vagas');
+});
+
+// ── GET /admin/vaga ── compatibilidade: redireciona p/ a edicao da vaga ativa ──
+router.get('/vaga', (req, res) => {
+  const vaga = db.obterVagaAtiva() || db.obterVaga(1);
+  return res.redirect(vaga ? `/admin/vagas/${vaga.id}` : '/admin/vagas');
 });
 
 // ── Edicao do roteiro de entrevista (B.2) ──

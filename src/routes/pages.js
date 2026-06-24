@@ -68,11 +68,25 @@ router.get('/vaga/:slug', (req, res) => {
           tema: 'claro',
           conteudo: placeholder({
             titulo: 'Vaga nao encontrada',
-            descricao: 'O link da vaga pode estar incorreto ou a vaga foi encerrada.',
+            descricao: 'O link da vaga pode estar incorreto.',
             acao: botao('/', 'Voltar ao inicio', 'secundario'),
           }),
         }),
       );
+  }
+  // Vaga encerrada (ativo=0): nao acessivel pelo candidato.
+  if (!vaga.ativo) {
+    return res.status(404).send(
+      pagina({
+        titulo: 'Vaga encerrada',
+        tema: 'claro',
+        conteudo: placeholder({
+          titulo: 'Vaga encerrada',
+          descricao: 'Esta vaga não está mais recebendo candidaturas.',
+          acao: botao('/', 'Voltar ao inicio', 'secundario'),
+        }),
+      }),
+    );
   }
 
   const chips = (vaga.skills || [])
@@ -189,7 +203,21 @@ router.get('/aplicar/:slug', (req, res) => {
         tema: 'claro',
         conteudo: placeholder({
           titulo: 'Vaga nao encontrada',
-          descricao: 'O link da vaga pode estar incorreto ou a vaga foi encerrada.',
+          descricao: 'O link da vaga pode estar incorreto.',
+          acao: botao('/', 'Voltar ao inicio', 'secundario'),
+        }),
+      }),
+    );
+  }
+  // Vaga encerrada (ativo=0): nao aceita novas candidaturas.
+  if (!vaga.ativo) {
+    return res.status(404).send(
+      pagina({
+        titulo: 'Vaga encerrada',
+        tema: 'claro',
+        conteudo: placeholder({
+          titulo: 'Vaga encerrada',
+          descricao: 'Esta vaga não está mais recebendo candidaturas.',
           acao: botao('/', 'Voltar ao inicio', 'secundario'),
         }),
       }),
