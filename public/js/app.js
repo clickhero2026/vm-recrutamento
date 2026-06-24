@@ -104,8 +104,21 @@
       return false;
     }
     if (!validarArquivo(inputArquivo.files[0])) return false;
+    if (chkConsentimento && !chkConsentimento.checked) {
+      mostrarErro('É necessário aceitar a coleta e uso dos seus dados para se candidatar.');
+      return false;
+    }
     return true;
   }
+
+  // Consentimento LGPD: o botao "Candidatar-me" so habilita com o checkbox marcado.
+  const chkConsentimento = form.querySelector('[data-consentimento]');
+  const btnEnviar = form.querySelector('[data-enviar]');
+  function sincronizarConsentimento() {
+    if (btnEnviar && chkConsentimento) btnEnviar.disabled = !chkConsentimento.checked;
+  }
+  if (chkConsentimento) chkConsentimento.addEventListener('change', sincronizarConsentimento);
+  sincronizarConsentimento();
 
   // Envio
   form.addEventListener('submit', async (e) => {
@@ -283,6 +296,7 @@ const VM_MIDIA = {
   const status = tela.querySelector('[data-status-mic]');
   const nota = tela.querySelector('[data-nota-seguranca]');
   const erro = tela.querySelector('[data-mic-erro]');
+  const chkGravacao = tela.querySelector('[data-consentimento-gravacao]');
 
   // Deteccao tolerante: piso baixo + acumulo de ~800ms, tolerando pausas.
   const LIMIAR_RMS = 0.025;
@@ -298,15 +312,22 @@ const VM_MIDIA = {
   let testando = false;
   let concluido = false;
   let ultimoLogTs = 0;
+  let micPronto = false; // microfone concedido/verificado
 
   function mostrarErro(msg) {
     erro.textContent = msg;
     erro.hidden = !msg;
   }
 
-  function habilitarContinuar() {
-    btnContinuar.disabled = false;
+  // "Continuar" so habilita com o microfone pronto E o aceite de gravacao (LGPD) marcado.
+  function atualizarContinuar() {
+    btnContinuar.disabled = !(micPronto && chkGravacao && chkGravacao.checked);
   }
+  function habilitarContinuar() {
+    micPronto = true;
+    atualizarContinuar();
+  }
+  if (chkGravacao) chkGravacao.addEventListener('change', atualizarContinuar);
 
   // Para a analise e libera o microfone (AudioContext fechado, tracks paradas).
   function pararAnalise() {
@@ -324,7 +345,23 @@ const VM_MIDIA = {
     barra.style.width = '0%';
   }
 
-  function navegarEntrevista() {
+  async function navegarEntrevista() {
+    // Guard do aceite de gravacao (cobre tambem o "Continuar mesmo assim").
+    if (chkGravacao && !chkGravacao.checked) {
+      mostrarErro('É necessário aceitar os termos de gravação para continuar.');
+      return;
+    }
+    // Registra o consentimento no servidor. Best-effort: nao trava o avanco se a rede
+    // falhar (o aceite ja foi exigido na UI; o registro e a trilha de auditoria).
+    try {
+      await fetch('/api/consentimento-gravacao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ consentimento: true }),
+      });
+    } catch (e) {
+      /* segue mesmo assim */
+    }
     pararAnalise();
     window.location = '/entrevista';
   }

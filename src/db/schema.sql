@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS applications (
   token          TEXT UNIQUE,     -- acesso retomavel
   status         TEXT NOT NULL DEFAULT 'aplicado'
                    CHECK (status IN ('aplicado', 'em_entrevista', 'concluido')),
+  consent_at          TEXT,        -- (Fase 5/LGPD) quando aceitou a coleta/uso dos dados (checkbox da aplicacao)
+  consent_gravacao_at TEXT,        -- (Fase 5/LGPD) quando aceitou a gravacao da entrevista (checkbox do teste de microfone)
   criado_em      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

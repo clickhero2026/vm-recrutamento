@@ -183,14 +183,17 @@ function criarRoteiro(roteiro) {
 }
 
 // Aplicacoes
+// Cria a aplicacao. consent_at recebe datetime('now') direto no INSERT: a rota so
+// chega aqui apos validar o checkbox de consentimento (LGPD), entao criar a linha ja
+// significa que o candidato consentiu — o momento da criacao e o momento do aceite.
 function criarAplicacao(aplicacao) {
   const info = getDb().prepare(`
     INSERT INTO applications
       (job_id, nome, sobrenome, email, telefone, linkedin_url,
-       curriculo_path, curriculo_texto, campos_extras, token, status)
+       curriculo_path, curriculo_texto, campos_extras, token, status, consent_at)
     VALUES
       (@job_id, @nome, @sobrenome, @email, @telefone, @linkedin_url,
-       @curriculo_path, @curriculo_texto, @campos_extras, @token, @status)
+       @curriculo_path, @curriculo_texto, @campos_extras, @token, @status, datetime('now'))
   `).run({
     job_id: aplicacao.job_id,
     nome: aplicacao.nome || null,
@@ -219,6 +222,18 @@ function obterAplicacaoPorToken(token) {
 
 function atualizarStatusAplicacao(id, status) {
   getDb().prepare('UPDATE applications SET status = ? WHERE id = ?').run(status, id);
+}
+
+// Registra o consentimento de gravacao (LGPD) no momento em que o candidato avanca do
+// teste de microfone. Idempotente: so grava se ainda nao houver aceite (preserva o
+// 1o aceite mesmo que o candidato volte/recarregue). Retorna o nº de linhas afetadas.
+function registrarConsentGravacao(id) {
+  const info = getDb()
+    .prepare(
+      "UPDATE applications SET consent_gravacao_at = datetime('now') WHERE id = ? AND consent_gravacao_at IS NULL",
+    )
+    .run(id);
+  return info.changes;
 }
 
 // Entrevistas
@@ -559,6 +574,7 @@ module.exports = {
   obterAplicacao,
   obterAplicacaoPorToken,
   atualizarStatusAplicacao,
+  registrarConsentGravacao,
   // entrevistas
   criarInterview,
   obterInterview,

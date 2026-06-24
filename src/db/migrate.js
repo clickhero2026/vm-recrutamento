@@ -43,6 +43,12 @@ function migrar() {
   // Fase 5 - gravacao de video: link compartilhavel do Google Drive por entrevista.
   adicionarColunaSeFaltar('interviews', 'video_url', 'TEXT');
 
+  // Fase 5 - consentimento LGPD: momento em que o candidato aceitou a coleta/uso dos
+  // dados (checkbox da aplicacao) e a gravacao da entrevista (checkbox do teste de
+  // microfone). Texto ISO/UTC, igual aos demais timestamps (datetime('now')).
+  adicionarColunaSeFaltar('applications', 'consent_at', 'TEXT');
+  adicionarColunaSeFaltar('applications', 'consent_gravacao_at', 'TEXT');
+
   // Indices de reports ficam aqui (e nao no schema.sql) porque dependem das
   // colunas acima, que em bancos antigos so passam a existir depois do ADD COLUMN.
   const db = getDb();

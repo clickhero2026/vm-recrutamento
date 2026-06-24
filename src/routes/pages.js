@@ -185,11 +185,14 @@ function formularioAplicacao(vaga) {
         </label>
       </div>
 
-      <button type="submit" class="vm-btn vm-btn--primario" data-enviar>Candidatar-me</button>
-      <p class="vm-rodape-nota">
-        Ao se candidatar, seus dados entram em nosso banco de talentos e podem ser usados para
-        esta e futuras oportunidades de vendas. Você pode solicitar a remoção a qualquer momento.
-      </p>
+      <label class="vm-aceite">
+        <input type="checkbox" name="consentimento" value="1" required data-consentimento>
+        <span>Concordo com a coleta e uso dos meus dados (nome, e-mail, telefone, LinkedIn e
+        currículo) para este processo seletivo e futuras oportunidades de vendas na Vendedor
+        Mestre. Posso solicitar a remoção a qualquer momento.</span>
+      </label>
+
+      <button type="submit" class="vm-btn vm-btn--primario" data-enviar disabled>Candidatar-me</button>
     </section>
   </form>`;
 }
@@ -425,6 +428,13 @@ router.get('/teste-microfone', exigirCandidato, (req, res) => {
 
       <p class="vm-status" data-status-mic aria-live="polite"></p>
       <p class="vm-form-erro" data-mic-erro hidden role="alert"></p>
+
+      <label class="vm-aceite">
+        <input type="checkbox" required data-consentimento-gravacao>
+        <span>Estou ciente de que esta entrevista será gravada em áudio e, se eu permitir a
+        câmera, também em vídeo. As gravações serão usadas exclusivamente para avaliação neste
+        processo seletivo.</span>
+      </label>
 
       <div class="vm-acoes">
         <button type="button" class="vm-btn vm-btn--secundario" data-falar>Falar</button>
