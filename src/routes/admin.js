@@ -572,6 +572,58 @@ function camposVagaHtml(vaga, { perfilEditavel }) {
     </label>`;
 }
 
+// Bloco "Links por etapa": URLs ABSOLUTAS (config.baseUrl + caminho) de cada etapa
+// do funil desta vaga, para parametrizar no GTM. Cada uma com botao "Copiar". A de
+// Confirmacao (/preparacao/:slug) e a que marca o LEAD no GTM. O <script> de copia
+// vai junto (o shell do admin nao carrega app.js).
+function blocoLinksEtapa(vaga) {
+  const base = config.baseUrl;
+  const linhas = [
+    ['Vaga', `${base}/vaga/${vaga.slug}`, 'Página pública da vaga — destino do tráfego pago.'],
+    ['Formulário', `${base}/aplicar/${vaga.slug}`, 'Formulário de candidatura.'],
+    [
+      'Confirmação (Lead)',
+      `${base}/preparacao/${vaga.slug}`,
+      'É esta que marca o LEAD no GTM (pageview por vaga). Use no acompanhamento de conversão.',
+    ],
+  ];
+
+  const itens = linhas
+    .map(
+      ([rotulo, url, desc]) => `
+      <div style="margin-bottom:.9rem;">
+        <div style="color:var(--cinza);font-size:.78rem;text-transform:uppercase;margin-bottom:.25rem;">${escapeHtml(rotulo)}</div>
+        <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+          <input type="text" readonly value="${escapeHtml(url)}" onfocus="this.select()"
+            style="flex:1;min-width:18rem;background:var(--campo);color:var(--offwhite);border:1px solid var(--linha);border-radius:6px;padding:.5rem .6rem;font:inherit;">
+          <button type="button" class="btn" data-copiar="${escapeHtml(url)}">Copiar</button>
+        </div>
+        <p style="color:var(--cinza);font-size:.78rem;margin:.25rem 0 0;">${escapeHtml(desc)}</p>
+      </div>`,
+    )
+    .join('');
+
+  return `
+    <section class="rel-sec">
+      <h2>Links por etapa</h2>
+      <p style="color:var(--cinza);font-size:.85rem;margin:0 0 .8rem;">
+        URLs completas para parametrizar no GTM. A <b>Confirmação (Lead)</b> é a que marca o lead.</p>
+      ${itens}
+    </section>
+    <script>
+      document.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-copiar]');
+        if (!b) return;
+        var url = b.getAttribute('data-copiar');
+        navigator.clipboard.writeText(url).then(function () {
+          var antes = b.textContent;
+          b.textContent = 'Copiado!';
+          setTimeout(function () { b.textContent = antes; }, 1500);
+        });
+      });
+    </script>`;
+}
+
 // ── GET /admin/vagas ── listagem de todas as vagas ──
 router.get('/vagas', (req, res) => {
   const vagas = db.listarVagas();
@@ -685,8 +737,7 @@ router.get('/vagas/:id', (req, res) => {
     <h1>Editar vaga</h1>
     ${salvo}
     ${avisoRoteiroFaltando(vaga)}
-    <p style="color:var(--cinza);font-size:.85rem;">
-      Link público: <a href="/vaga/${escapeHtml(vaga.slug)}" target="_blank" rel="noopener noreferrer">/vaga/${escapeHtml(vaga.slug)}</a></p>
+    ${blocoLinksEtapa(vaga)}
     <form method="POST" action="/admin/vagas/${vaga.id}">
       ${camposVagaHtml(vaga, { perfilEditavel: false })}
       <button type="submit" class="btn">Salvar alterações</button>
