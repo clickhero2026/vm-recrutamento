@@ -89,33 +89,64 @@ router.get('/vaga/:slug', (req, res) => {
     );
   }
 
-  const chips = (vaga.skills || [])
-    .map((s) => `<span class="vm-chip">${escapeHtml(s)}</span>`)
+  const esc = escapeHtml;
+
+  // Monta uma <section> "titulo (h2) + lista". Retorna '' quando nao ha itens
+  // (oculta a secao vazia). O titulo ja vem com o emoji de apoio e e texto de
+  // tela controlado por nos; os itens sao dados da vaga, entao passam por esc().
+  const secaoLista = (titulo, itens) => {
+    const lis = (itens || []).map((i) => `<li>${esc(i)}</li>`).join('');
+    return lis
+      ? `<section class="vm-secao">
+          <h2 class="vm-h2">${titulo}</h2>
+          <ul class="vm-lista">${lis}</ul>
+        </section>`
+      : '';
+  };
+
+  // Chips de competências (skills).
+  const chips = (vaga.skills || []).map((s) => `<span class="vm-chip">${esc(s)}</span>`).join('');
+  const secaoSkills = chips
+    ? `<section class="vm-secao">
+        <h2 class="vm-h2">🎯 Competências</h2>
+        <div class="vm-chips">${chips}</div>
+      </section>`
+    : '';
+
+  // Seções extras editáveis (cada uma: título do recrutador + lista). O título e o
+  // texto dos itens sao dados da vaga, entao ambos passam por esc().
+  const secoesExtras = (vaga.secoes_extras || [])
+    .filter((s) => s && s.titulo)
+    .map((s) => {
+      const lis = (s.itens || []).map((i) => `<li>${esc(i)}</li>`).join('');
+      return `<section class="vm-secao">
+          <h2 class="vm-h2">📌 ${esc(s.titulo)}</h2>
+          ${lis ? `<ul class="vm-lista">${lis}</ul>` : ''}
+        </section>`;
+    })
     .join('');
 
   const conteudo = `
-    <article class="vm-vaga vm-vaga--centro">
-      <p class="vm-kicker">Vaga aberta · Perfil ${escapeHtml(vaga.perfil)}</p>
-      <h1 class="vm-title">${escapeHtml(vaga.titulo)}</h1>
+    <article class="vm-vaga">
+      <p class="vm-kicker">Vaga aberta · Perfil ${esc(vaga.perfil)}</p>
+      <h1 class="vm-title">${esc(vaga.titulo)}</h1>
+      ${vaga.faixa_pagamento ? `<p class="vm-pay-chip">${esc(vaga.faixa_pagamento)}</p>` : ''}
       ${
-        vaga.faixa_pagamento
-          ? `<p class="vm-pay-chip">${escapeHtml(vaga.faixa_pagamento)}</p>`
+        vaga.potencial_ganhos
+          ? `<p class="vm-lead"><b>💰 Potencial de ganhos:</b> ${esc(vaga.potencial_ganhos)}</p>`
           : ''
       }
-      ${vaga.descricao ? `<p class="vm-lead">${escapeHtml(vaga.descricao)}</p>` : ''}
-      ${
-        chips
-          ? `<section class="vm-secao">
-              <h2 class="vm-h2">Competências exigidas</h2>
-              <div class="vm-chips">${chips}</div>
-            </section>`
-          : ''
-      }
+      ${vaga.descricao ? `<p class="vm-lead">${esc(vaga.descricao)}</p>` : ''}
+      ${secaoLista('📋 Atividades', vaga.atividades)}
+      ${secaoLista('✅ Requisitos', vaga.requisitos)}
+      ${secaoLista('🎁 Benefícios', vaga.beneficios)}
+      ${secaoSkills}
+      ${secoesExtras}
       ${
         vaga.sobre_empresa
           ? `<section class="vm-secao">
-              <h2 class="vm-h2">Sobre a empresa</h2>
-              <div class="vm-card"><p>${escapeHtml(vaga.sobre_empresa)}</p></div>
+              <h2 class="vm-h2">🏢 Sobre a empresa</h2>
+              <div class="vm-card"><p>${esc(vaga.sobre_empresa)}</p></div>
             </section>`
           : ''
       }
