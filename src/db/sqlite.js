@@ -48,7 +48,13 @@ function jobDeLinha(linha) {
   if (!linha) return null;
   return {
     ...linha,
+    // Arrays estruturados (uma string por item). potencial_ganhos e texto livre,
+    // entao fica como veio na linha (...linha).
     skills: lerJson(linha.skills, []),
+    beneficios: lerJson(linha.beneficios, []),
+    atividades: lerJson(linha.atividades, []),
+    requisitos: lerJson(linha.requisitos, []),
+    secoes_extras: lerJson(linha.secoes_extras, []),
     ativo: Boolean(linha.ativo),
   };
 }
@@ -91,15 +97,26 @@ function listarVagas() {
 
 function criarVaga(vaga) {
   const stmt = getDb().prepare(`
-    INSERT INTO jobs (slug, titulo, perfil, faixa_pagamento, skills, descricao, sobre_empresa, roteiro_id, ativo)
-    VALUES (@slug, @titulo, @perfil, @faixa_pagamento, @skills, @descricao, @sobre_empresa, @roteiro_id, @ativo)
+    INSERT INTO jobs
+      (slug, titulo, perfil, faixa_pagamento, potencial_ganhos, skills,
+       beneficios, atividades, requisitos, secoes_extras,
+       descricao, sobre_empresa, roteiro_id, ativo)
+    VALUES
+      (@slug, @titulo, @perfil, @faixa_pagamento, @potencial_ganhos, @skills,
+       @beneficios, @atividades, @requisitos, @secoes_extras,
+       @descricao, @sobre_empresa, @roteiro_id, @ativo)
   `);
   const info = stmt.run({
     slug: vaga.slug,
     titulo: vaga.titulo,
     perfil: vaga.perfil,
     faixa_pagamento: vaga.faixa_pagamento || null,
+    potencial_ganhos: vaga.potencial_ganhos || null,
     skills: JSON.stringify(vaga.skills || []),
+    beneficios: JSON.stringify(vaga.beneficios || []),
+    atividades: JSON.stringify(vaga.atividades || []),
+    requisitos: JSON.stringify(vaga.requisitos || []),
+    secoes_extras: JSON.stringify(vaga.secoes_extras || []),
     descricao: vaga.descricao || null,
     sobre_empresa: vaga.sobre_empresa || null,
     roteiro_id: vaga.roteiro_id || null,
@@ -108,23 +125,36 @@ function criarVaga(vaga) {
   return Number(info.lastInsertRowid);
 }
 
-// Atualiza os campos editaveis da vaga pelo painel (Fase 5). NAO mexe em slug/perfil/
-// roteiro_id/skills (fora do escopo desta versao).
+// Atualiza os campos editaveis da vaga pelo painel. Inclui os campos ricos da nova
+// pagina de vaga (potencial_ganhos, skills, beneficios, atividades, requisitos,
+// secoes_extras). NAO mexe em slug/perfil/roteiro_id (fora do escopo).
 function atualizarVaga(id, campos) {
   getDb()
     .prepare(
       `UPDATE jobs SET
-         titulo          = @titulo,
-         faixa_pagamento = @faixa_pagamento,
-         descricao       = @descricao,
-         sobre_empresa   = @sobre_empresa,
-         ativo           = @ativo
+         titulo           = @titulo,
+         faixa_pagamento  = @faixa_pagamento,
+         potencial_ganhos = @potencial_ganhos,
+         skills           = @skills,
+         beneficios       = @beneficios,
+         atividades       = @atividades,
+         requisitos       = @requisitos,
+         secoes_extras    = @secoes_extras,
+         descricao        = @descricao,
+         sobre_empresa    = @sobre_empresa,
+         ativo            = @ativo
        WHERE id = @id`,
     )
     .run({
       id,
       titulo: campos.titulo,
       faixa_pagamento: campos.faixa_pagamento || null,
+      potencial_ganhos: campos.potencial_ganhos || null,
+      skills: JSON.stringify(campos.skills || []),
+      beneficios: JSON.stringify(campos.beneficios || []),
+      atividades: JSON.stringify(campos.atividades || []),
+      requisitos: JSON.stringify(campos.requisitos || []),
+      secoes_extras: JSON.stringify(campos.secoes_extras || []),
       descricao: campos.descricao || null,
       sobre_empresa: campos.sobre_empresa || null,
       ativo: campos.ativo === false ? 0 : 1,

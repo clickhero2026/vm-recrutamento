@@ -40,6 +40,16 @@ function migrar() {
   adicionarColunaSeFaltar('jobs', 'sobre_empresa', 'TEXT');
   adicionarColunaSeFaltar('jobs', 'ativo', 'INTEGER NOT NULL DEFAULT 1');
 
+  // Pagina de vaga rica: campos estruturados adicionais para a nova /vaga/:slug.
+  // potencial_ganhos e texto livre; os demais sao arrays serializados em JSON
+  // (uma string por item). Idempotente: bancos antigos ganham as colunas sem
+  // recriar a tabela (nunca fazemos DROP).
+  adicionarColunaSeFaltar('jobs', 'potencial_ganhos', 'TEXT');
+  adicionarColunaSeFaltar('jobs', 'beneficios', 'TEXT'); // JSON (array de strings)
+  adicionarColunaSeFaltar('jobs', 'atividades', 'TEXT'); // JSON (array de strings)
+  adicionarColunaSeFaltar('jobs', 'requisitos', 'TEXT'); // JSON (array de strings)
+  adicionarColunaSeFaltar('jobs', 'secoes_extras', 'TEXT'); // JSON (array de {titulo, itens})
+
   // Fase 5 - gravacao de video: link compartilhavel do Google Drive por entrevista.
   adicionarColunaSeFaltar('interviews', 'video_url', 'TEXT');
 
