@@ -197,23 +197,21 @@ html.tema-escuro .vm-funil__etapa--concluida .vm-funil__rotulo{ color:var(--vm-w
   border:1px solid var(--vm-orange);
 }
 
-/* CTA fixo no rodape (mobile); estatico no desktop */
-.vm-cta-fixa{ width:100%; margin-top:.5rem; }
-.vm-cta-fixa .vm-btn{ width:100%; }
-@media (max-width:767px){
-  .vm-cta-fixa{
-    position:fixed; left:0; right:0; bottom:0; z-index:10;
-    padding:.85rem 1.25rem calc(.85rem + env(safe-area-inset-bottom));
-    margin:0;
-    background:var(--vm-offwhite);
-    border-top:1px solid color-mix(in srgb, var(--vm-gray-mid) 35%, transparent);
-  }
-  /* respiro para o conteudo nao ficar escondido atras do CTA fixo */
-  html.tema-claro .vm-container:has(.vm-cta-fixa){ padding-bottom:6rem; }
+/* CTA fixo no rodape, sempre visivel ao rolar (mobile e desktop). */
+.vm-cta-fixa{
+  position:fixed; left:0; right:0; bottom:0; z-index:10;
+  margin:0;
+  padding:.85rem 1.25rem calc(.85rem + env(safe-area-inset-bottom));
+  background:var(--vm-offwhite);
+  border-top:1px solid color-mix(in srgb, var(--vm-gray-mid) 35%, transparent);
 }
+.vm-cta-fixa .vm-btn{ width:100%; }
+/* Respiro no rodape do conteudo p/ a ultima secao nao ficar atras do CTA fixo. */
+.vm-container:has(.vm-cta-fixa){ padding-bottom:6rem; }
 @media (min-width:768px){
+  /* No desktop o botao nao ocupa a largura toda; fica centralizado na barra. */
   .vm-cta-fixa{ display:flex; justify-content:center; }
-  .vm-cta-fixa .vm-btn{ width:auto; }
+  .vm-cta-fixa .vm-btn{ width:auto; min-width:16rem; }
 }
 
 /* ── Orbe do agente Vera (laranja sobre preto) ── */
