@@ -287,7 +287,10 @@ function estimarDuracao(roteiro) {
 }
 
 // ── Tela 3: Preparacao (protegida) ──
-router.get('/preparacao', exigirCandidato, (req, res) => {
+// Monta a pagina de preparacao a partir da vaga/roteiro da SESSAO do candidato.
+// Compartilhada entre /preparacao (back-compat) e /preparacao/:slug (URL por etapa
+// p/ rastreio no GTM). A vaga vem sempre da sessao, nunca da slug da URL.
+function paginaPreparacao(req) {
   const { candidato, vaga, roteiro } = vagaERoteiroDaSessao(req);
   const tituloVaga = vaga ? vaga.titulo : 'em aberto';
   const { min, max } = estimarDuracao(roteiro);
@@ -338,9 +341,23 @@ router.get('/preparacao', exigirCandidato, (req, res) => {
 
     ${botao('/permissao-microfone', 'Pode começar')}`;
 
-  res.send(
-    pagina({ titulo: 'Preparação para a entrevista', tema: 'claro', etapa: 2, conteudo }),
-  );
+  return pagina({ titulo: 'Preparação para a entrevista', tema: 'claro', etapa: 2, conteudo });
+}
+
+// /preparacao (sem slug): back-compat (links antigos, redirect de /instrucoes).
+router.get('/preparacao', exigirCandidato, (req, res) => {
+  res.send(paginaPreparacao(req));
+});
+
+// /preparacao/:slug: mesma pagina, com a slug da vaga na URL p/ diferenciar o lead
+// por vaga no GTM. A vaga real e sempre a da SESSAO: se a slug da URL nao bater com
+// a da sessao, redireciona para a slug correta (sem confiar na URL).
+router.get('/preparacao/:slug', exigirCandidato, (req, res) => {
+  const { vaga } = vagaERoteiroDaSessao(req);
+  if (vaga && vaga.slug && req.params.slug !== vaga.slug) {
+    return res.redirect(`/preparacao/${vaga.slug}`);
+  }
+  return res.send(paginaPreparacao(req));
 });
 
 // ── Tela 4: Identificacao (fallback — so para quem volta sem sessao) ──

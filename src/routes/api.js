@@ -221,9 +221,10 @@ router.post('/aplicacao', (req, res) => {
         );
       }
 
-      // Grava a sessao do candidato e manda o front redirecionar
+      // Grava a sessao do candidato e manda o front redirecionar para a
+      // /preparacao/:slug da vaga (URL por etapa p/ rastreio no GTM).
       session.setToken(res, token);
-      return res.json({ ok: true, redirect: '/preparacao' });
+      return res.json({ ok: true, redirect: `/preparacao/${vaga.slug}` });
     } catch (erro) {
       console.error('[api/aplicacao] erro:', erro.message);
       return res
@@ -281,7 +282,11 @@ router.post('/identificacao', (req, res) => {
   }
 
   session.setToken(res, aplicacao.token);
-  return res.json({ ok: true, redirect: '/preparacao' });
+  // Redireciona para a /preparacao/:slug da vaga da aplicacao (URL por etapa).
+  // Se a vaga nao for encontrada (caso raro), cai na /preparacao sem slug.
+  const vaga = db.obterVaga(aplicacao.job_id);
+  const destino = vaga && vaga.slug ? `/preparacao/${vaga.slug}` : '/preparacao';
+  return res.json({ ok: true, redirect: destino });
 });
 
 // Resolve o roteiro de uma vaga (ou null).
