@@ -445,6 +445,53 @@ function avisoRoteiroFaltando(vaga) {
     não funcionará até que um roteiro ${escapeHtml(vaga.perfil)} seja criado e vinculado.</p>`;
 }
 
+// ── Campos ricos da vaga (pagina de vaga rica) ──
+
+// secoes_extras e gravado como array de { titulo, itens[] }. No formulario, cada
+// secao e digitada num unico textarea com a convencao:
+//   uma linha "## Titulo" abre a secao; as linhas seguintes (sem prefixo) sao os
+//   itens (um por linha). Trim em tudo; linhas vazias descartadas; itens antes do
+//   1o titulo sao ignorados; secoes sem titulo nao entram.
+function parseSecoesExtras(texto) {
+  const secoes = [];
+  let atual = null;
+  for (const bruta of String(texto || '').split('\n')) {
+    const linha = bruta.trim();
+    if (!linha) continue;
+    const m = linha.match(/^#{1,3}\s+(.*)$/);
+    if (m) {
+      atual = { titulo: m[1].trim(), itens: [] };
+      secoes.push(atual);
+    } else if (atual) {
+      atual.itens.push(linha);
+    }
+  }
+  return secoes.filter((s) => s.titulo);
+}
+
+// Caminho inverso: monta o texto do textarea a partir do array salvo (pre-popular
+// a edicao). Espelha a convencao de parseSecoesExtras ("## Titulo" + itens).
+function secoesExtrasParaTexto(secoes) {
+  if (!Array.isArray(secoes)) return '';
+  return secoes
+    .map((s) => [`## ${s.titulo || ''}`.trim(), ...(Array.isArray(s.itens) ? s.itens : [])].join('\n'))
+    .join('\n\n');
+}
+
+// Le do corpo do POST os campos ricos (compartilhado entre criar e editar). Arrays
+// "um item por linha" via arrayDeLinhas (declarado adiante; hoisted); potencial_ganhos
+// e texto livre; secoes_extras usa o parser proprio acima.
+function lerCamposRicos(b) {
+  return {
+    potencial_ganhos: String(b.potencial_ganhos || '').trim(),
+    skills: arrayDeLinhas(b.skills),
+    beneficios: arrayDeLinhas(b.beneficios),
+    atividades: arrayDeLinhas(b.atividades),
+    requisitos: arrayDeLinhas(b.requisitos),
+    secoes_extras: parseSecoesExtras(b.secoes_extras),
+  };
+}
+
 // Campos do formulario de vaga (compartilhados entre criar e editar). No modo "novo"
 // o perfil e um <select> (define o roteiro vinculado); no modo "editar" o perfil e
 // apenas exibido (atualizarVaga nao mexe em perfil/roteiro_id/slug).
@@ -477,9 +524,42 @@ function camposVagaHtml(vaga, { perfilEditavel }) {
     </label>
 
     <label class="campo">
+      <span>Potencial de ganhos</span>
+      <textarea name="potencial_ganhos" rows="2" placeholder="Ex.: comissões sem teto — top performers faturam R$ 15.000+/mês">${escapeHtml(vaga.potencial_ganhos || '')}</textarea>
+    </label>
+
+    <label class="campo">
       <span>Descrição da vaga</span>
       <textarea name="descricao" rows="6">${escapeHtml(vaga.descricao || '')}</textarea>
     </label>
+
+    <label class="campo">
+      <span>Atividades (um item por linha)</span>
+      <textarea name="atividades" rows="6">${escapeHtml(linhasDeArray(vaga.atividades))}</textarea>
+    </label>
+
+    <label class="campo">
+      <span>Requisitos (um item por linha)</span>
+      <textarea name="requisitos" rows="6">${escapeHtml(linhasDeArray(vaga.requisitos))}</textarea>
+    </label>
+
+    <label class="campo">
+      <span>Benefícios (um item por linha)</span>
+      <textarea name="beneficios" rows="6">${escapeHtml(linhasDeArray(vaga.beneficios))}</textarea>
+    </label>
+
+    <label class="campo">
+      <span>Competências / skills (um item por linha)</span>
+      <textarea name="skills" rows="5">${escapeHtml(linhasDeArray(vaga.skills))}</textarea>
+    </label>
+
+    <label class="campo">
+      <span>Seções extras (opcional)</span>
+      <textarea name="secoes_extras" rows="7" placeholder="## Título da seção&#10;Primeiro item&#10;Segundo item&#10;&#10;## Outra seção&#10;Item">${escapeHtml(secoesExtrasParaTexto(vaga.secoes_extras))}</textarea>
+    </label>
+    <p style="color:var(--cinza);font-size:.8rem;margin:-.5rem 0 1.2rem;">
+      Cada seção começa com uma linha <b>## Título</b>; as linhas seguintes são os itens
+      (um por linha). Deixe vazio se não precisar.</p>
 
     <label class="campo">
       <span>Sobre a empresa</span>
@@ -583,8 +663,8 @@ router.post('/vagas', (req, res) => {
     descricao: String(b.descricao || '').trim(),
     sobre_empresa: String(b.sobre_empresa || '').trim(),
     roteiro_id: roteiro ? roteiro.id : null,
-    skills: [],
     ativo: b.ativo === '1' || b.ativo === 'on',
+    ...lerCamposRicos(b),
   });
 
   res.redirect(`/admin/vagas/${id}?salvo=1`);
@@ -643,6 +723,7 @@ router.post('/vagas/:id', (req, res) => {
     descricao: String(b.descricao || '').trim(),
     sobre_empresa: String(b.sobre_empresa || '').trim(),
     ativo: b.ativo === '1' || b.ativo === 'on',
+    ...lerCamposRicos(b),
   });
 
   res.redirect(`/admin/vagas/${id}?salvo=1`);
