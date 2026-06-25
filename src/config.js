@@ -51,6 +51,13 @@ const config = {
     nome: process.env.AGENT_NAME || 'Vera',
   },
 
+  // Rastreio (GTM / Meta Pixel) — injetados no layout do candidato (views.js)
+  // SOMENTE quando definidos. Vazio = nada e injetado. Nunca vao para o painel admin.
+  rastreio: {
+    gtmId: process.env.GTM_ID || '',
+    metaPixelId: process.env.META_PIXEL_ID || '',
+  },
+
   recrutador: {
     email: process.env.RECRUITER_EMAIL || '',
   },
