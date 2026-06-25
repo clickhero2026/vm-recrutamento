@@ -62,12 +62,13 @@ const config = {
     email: process.env.RECRUITER_EMAIL || '',
   },
 
-  // Painel do recrutador (Fase 5): segredo da URL/cookie de acesso ao /admin.
-  // Vazio = painel BLOQUEADO (o middleware nega tudo). O cookie de admin e assinado
-  // com o SESSION_SECRET (mesmo mecanismo do cookie do candidato); aqui guardamos
-  // apenas o VALOR comparado.
+  // Painel do recrutador: credenciais fixas (usuario + senha) da tela de login do
+  // /admin, lidas do ambiente. Sem usuario OU sem senha = painel BLOQUEADO (o
+  // middleware nega o login). O cookie de admin e assinado com o SESSION_SECRET
+  // (mesmo mecanismo do cookie do candidato).
   admin: {
-    secret: process.env.ADMIN_SECRET || '',
+    user: process.env.ADMIN_USER || '',
+    password: process.env.ADMIN_PASSWORD || '',
   },
 
   entrevista: {

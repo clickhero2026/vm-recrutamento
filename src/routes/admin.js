@@ -1,12 +1,13 @@
 'use strict';
 
-// Painel do recrutador (Fase 5). Area protegida por URL/cookie secreto, separada do
-// funil do candidato. Server-rendered, identidade visual Vendedor Mestre (tema escuro:
-// preto #0D0B0A, laranja #FF5500, off-white #F4F3F1; Barlow Condensed nos titulos).
+// Painel do recrutador (Fase 5). Area protegida por login (usuario + senha), separada
+// do funil do candidato. Server-rendered, identidade visual Vendedor Mestre (tema
+// escuro: preto #0D0B0A, laranja #FF5500, off-white #F4F3F1; Barlow Condensed nos titulos).
 //
-// Seguranca: o middleware adminAuth abaixo protege TODAS as rotas deste router. O
-// cookie de admin e ASSINADO com o SESSION_SECRET (mesmo cookie-parser do candidato);
-// o valor comparado e o ADMIN_SECRET. Sem ADMIN_SECRET definido, o painel fica negado.
+// Seguranca: o middleware adminAuth abaixo protege TODAS as rotas deste router, EXCETO
+// as publicas de login/logout (registradas antes dele). O cookie de admin (vm_admin) e
+// ASSINADO com o SESSION_SECRET (mesmo cookie-parser do candidato) e guarda o valor de
+// ADMIN_PASSWORD. Sem ADMIN_USER/ADMIN_PASSWORD definidos, o login nunca autentica.
 
 const express = require('express');
 const { config } = require('../config');
@@ -17,42 +18,80 @@ const { escapeHtml } = require('../views');
 const router = express.Router();
 
 const COOKIE_ADMIN = 'vm_admin';
-const MAX_IDADE_ADMIN_MS = 8 * 60 * 60 * 1000; // 8 horas
+const MAX_IDADE_ADMIN_MS = 15 * 24 * 60 * 60 * 1000; // 15 dias
+
+// Sessao de admin valida: cookie assinado vm_admin igual a senha configurada.
+// Sem ADMIN_PASSWORD definido, nunca autentica (painel bloqueado).
+function adminAutenticado(req) {
+  const senha = config.admin.password;
+  return Boolean(senha) && req.signedCookies && req.signedCookies[COOKIE_ADMIN] === senha;
+}
+
+// Saneia o destino de redirecionamento pos-login: aceita apenas caminhos internos
+// do painel (evita open redirect via ?redirect=//site-externo). Default: /admin.
+function destinoSeguro(redirect) {
+  const r = String(redirect || '');
+  return /^\/admin(\/|\?|$)/.test(r) ? r : '/admin';
+}
 
 // ── Middleware de acesso ao painel ──
-// 1) cookie assinado vm_admin == ADMIN_SECRET -> libera;
-// 2) ?secret=ADMIN_SECRET -> grava o cookie (8h) e redireciona p/ a URL sem o param;
-// 3) caso contrario -> 403 com pagina HTML simples em pt-BR.
+// Sem sessao valida (cookie vm_admin assinado == ADMIN_PASSWORD) -> manda para a
+// tela de login, preservando em ?redirect o destino que o usuario tentou abrir.
+// Com sessao valida -> segue.
 function adminAuth(req, res, next) {
-  const segredo = config.admin.secret;
-
-  // Painel nao configurado: nega tudo (evita que cookie vazio "case" com secret vazio).
-  if (!segredo) {
-    return res.status(403).send(paginaErroAdmin('Painel não configurado.'));
-  }
-
-  // 1) Ja autenticado pelo cookie assinado.
-  if (req.signedCookies && req.signedCookies[COOKIE_ADMIN] === segredo) {
+  if (adminAutenticado(req)) {
     return next();
   }
+  const destino = encodeURIComponent(req.originalUrl);
+  return res.redirect(`/admin/login?redirect=${destino}`);
+}
 
-  // 2) Acesso pela URL secreta: grava cookie e limpa o parametro da URL.
-  if (req.query && req.query.secret === segredo) {
-    res.cookie(COOKIE_ADMIN, segredo, {
-      httpOnly: true,
-      signed: true,
-      sameSite: 'lax',
-      secure: config.ehProducao,
-      maxAge: MAX_IDADE_ADMIN_MS,
-      path: '/',
-    });
-    // Redireciona para o mesmo caminho SEM a query (tira o secret da barra/historico).
-    return res.redirect(`${req.baseUrl}${req.path}`);
+// ── Rotas PUBLICAS de login (ficam ANTES do router.use(adminAuth) para nao serem
+//    barradas pelo proprio gate de acesso) ──
+
+// GET /admin/login: formulario. Se ja autenticado, vai direto ao destino.
+router.get('/login', (req, res) => {
+  const destino = destinoSeguro(req.query.redirect);
+  if (adminAutenticado(req)) {
+    return res.redirect(destino);
+  }
+  res.send(paginaLogin({ redirect: destino }));
+});
+
+// POST /admin/login: valida ADMIN_USER + ADMIN_PASSWORD (comparacao direta; sao
+// credenciais fixas de ambiente, nao armazenadas). Sucesso grava o cookie de 15
+// dias; falha re-renderiza o formulario sem revelar qual campo errou.
+router.post('/login', (req, res) => {
+  const b = req.body || {};
+  const usuario = String(b.usuario || '');
+  const senha = String(b.senha || '');
+  const destino = destinoSeguro(b.redirect);
+
+  const { user, password } = config.admin;
+  const ok = Boolean(user) && Boolean(password) && usuario === user && senha === password;
+  if (!ok) {
+    return res
+      .status(401)
+      .send(paginaLogin({ erro: 'Usuário ou senha inválidos.', redirect: destino }));
   }
 
-  // 3) Sem acesso.
-  return res.status(403).send(paginaErroAdmin('Acesso negado.'));
-}
+  res.cookie(COOKIE_ADMIN, password, {
+    httpOnly: true,
+    signed: true,
+    sameSite: 'lax',
+    secure: config.ehProducao,
+    maxAge: MAX_IDADE_ADMIN_MS,
+    path: '/',
+  });
+  res.redirect(destino);
+});
+
+// GET /admin/logout: encerra a sessao (limpa o cookie) e volta ao login. Publica
+// para funcionar mesmo com cookie ja invalido.
+router.get('/logout', (req, res) => {
+  res.clearCookie(COOKIE_ADMIN, { path: '/' });
+  res.redirect('/admin/login');
+});
 
 router.use(adminAuth);
 
@@ -67,6 +106,8 @@ const ESTILO_ADMIN = `
   .admin-cab { border-bottom:1px solid var(--linha); padding-bottom:1rem; margin-bottom:1.5rem; }
   .admin-logo { font-family:'Barlow Condensed',sans-serif; font-weight:900; text-transform:uppercase; color:var(--laranja); font-size:2rem; letter-spacing:.04em; margin:0; }
   .admin-sub { color:var(--offwhite); margin:.15rem 0 0; font-size:1.05rem; }
+  .admin-sair { color:var(--cinza); font-size:.85rem; text-decoration:none; white-space:nowrap; }
+  .admin-sair:hover { color:var(--laranja); }
   h1,h2,h3 { font-family:'Barlow Condensed',sans-serif; text-transform:uppercase; letter-spacing:.03em; }
   a { color:var(--laranja); }
   .admin-tab-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
@@ -103,8 +144,8 @@ const ESTILO_ADMIN = `
   .turno--cand .turno-autor { color:var(--offwhite); }
   .campo { display:block; margin-bottom:1rem; }
   .campo > span { display:block; color:var(--cinza); font-size:.85rem; text-transform:uppercase; margin-bottom:.3rem; }
-  .campo input[type=text], .campo textarea { width:100%; background:var(--campo); color:var(--offwhite); border:1px solid var(--linha); border-radius:6px; padding:.6rem .7rem; font:inherit; }
-  .campo input[type=text]:focus, .campo textarea:focus { outline:none; border-color:var(--laranja); }
+  .campo input[type=text], .campo input[type=password], .campo textarea { width:100%; background:var(--campo); color:var(--offwhite); border:1px solid var(--linha); border-radius:6px; padding:.6rem .7rem; font:inherit; }
+  .campo input[type=text]:focus, .campo input[type=password]:focus, .campo textarea:focus { outline:none; border-color:var(--laranja); }
   .campo-check { display:flex; align-items:center; gap:.5rem; margin-bottom:1.2rem; }
   .aviso-ok { background:var(--linha); border-left:3px solid var(--laranja); padding:.6rem .9rem; border-radius:4px; margin-bottom:1rem; }
   .aviso-alerta { background:var(--campo); border:1px solid var(--laranja); border-left:4px solid var(--laranja); color:var(--offwhite); padding:.6rem .9rem; border-radius:4px; margin-bottom:1rem; font-size:.92rem; }
@@ -121,7 +162,8 @@ const ESTILO_ADMIN = `
 `;
 
 // Shell HTML do painel (sem o header/funil/app.js do candidato).
-function paginaAdmin({ titulo, conteudo, subtitulo = 'Painel do Recrutador' }) {
+function paginaAdmin({ titulo, conteudo, subtitulo = 'Painel do Recrutador', mostrarSair = true }) {
+  const sair = mostrarSair ? '<a class="admin-sair" href="/admin/logout">Sair</a>' : '';
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -136,9 +178,12 @@ function paginaAdmin({ titulo, conteudo, subtitulo = 'Painel do Recrutador' }) {
 </head>
 <body>
   <div class="admin-wrap">
-    <header class="admin-cab">
-      <p class="admin-logo">Vendedor Mestre</p>
-      <p class="admin-sub">${escapeHtml(subtitulo)}</p>
+    <header class="admin-cab" style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">
+      <div>
+        <p class="admin-logo">Vendedor Mestre</p>
+        <p class="admin-sub">${escapeHtml(subtitulo)}</p>
+      </div>
+      ${sair}
     </header>
     ${conteudo}
   </div>
@@ -155,6 +200,34 @@ function paginaErroAdmin(mensagem) {
       <section class="rel-sec">
         <h1>Acesso negado</h1>
         <p>${escapeHtml(mensagem)}</p>
+      </section>`,
+  });
+}
+
+// Tela de login do painel. Reusa o shell paginaAdmin (mesma identidade visual);
+// conteudo minimalista: titulo, campos usuario/senha e botao Entrar. O campo
+// oculto "redirect" preserva o destino pretendido atraves do POST.
+function paginaLogin({ erro = '', redirect = '/admin' } = {}) {
+  return paginaAdmin({
+    titulo: 'Entrar',
+    subtitulo: 'Painel Administrativo',
+    mostrarSair: false,
+    conteudo: `
+      <section class="rel-sec" style="max-width:380px;margin:2rem auto 0;">
+        <h1 style="margin:0 0 1.2rem;">Painel administrativo</h1>
+        ${erro ? `<p class="aviso-alerta">${escapeHtml(erro)}</p>` : ''}
+        <form method="POST" action="/admin/login">
+          <input type="hidden" name="redirect" value="${escapeHtml(redirect)}">
+          <label class="campo">
+            <span>Usuário</span>
+            <input type="text" name="usuario" autocomplete="username" autofocus required>
+          </label>
+          <label class="campo">
+            <span>Senha</span>
+            <input type="password" name="senha" autocomplete="current-password" required>
+          </label>
+          <button type="submit" class="btn" style="width:100%;">Entrar</button>
+        </form>
       </section>`,
   });
 }
