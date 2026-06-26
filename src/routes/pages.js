@@ -126,6 +126,21 @@ router.get('/vaga/:slug', (req, res) => {
     })
     .join('');
 
+  // Selos compactos (chips escuros) com os detalhes preenchidos da vaga. Cada selo
+  // so aparece se o campo tiver valor. modalidade vem em minusculo no banco; exibimos
+  // capitalizada. Ordem: endereco, modalidade, regime, horario.
+  const capitalizar = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+  const selos = [
+    vaga.endereco ? ['📍', vaga.endereco] : null,
+    vaga.modalidade ? ['🏢', capitalizar(vaga.modalidade)] : null,
+    vaga.regime ? ['📄', vaga.regime] : null,
+    vaga.horario ? ['🕐', vaga.horario] : null,
+  ]
+    .filter(Boolean)
+    .map(([emoji, txt]) => `<span class="vm-selo">${emoji} ${esc(txt)}</span>`)
+    .join('');
+  const secaoSelos = selos ? `<div class="vm-selos">${selos}</div>` : '';
+
   const conteudo = `
     <article class="vm-vaga">
       <p class="vm-kicker">Vaga aberta · Perfil ${esc(vaga.perfil)}</p>
@@ -133,9 +148,13 @@ router.get('/vaga/:slug', (req, res) => {
       ${vaga.faixa_pagamento ? `<p class="vm-pay-chip">${esc(vaga.faixa_pagamento)}</p>` : ''}
       ${
         vaga.potencial_ganhos
-          ? `<p class="vm-lead"><b>💰 Potencial de ganhos:</b> ${esc(vaga.potencial_ganhos)}</p>`
+          ? `<div class="vm-ganhos">
+              <p class="vm-ganhos__rotulo">💰 Potencial de ganhos</p>
+              <p class="vm-ganhos__valor">${esc(vaga.potencial_ganhos)}</p>
+            </div>`
           : ''
       }
+      ${secaoSelos}
       ${vaga.descricao ? `<p class="vm-lead">${esc(vaga.descricao)}</p>` : ''}
       ${secaoLista('📋 Atividades', vaga.atividades)}
       ${secaoLista('✅ Requisitos', vaga.requisitos)}

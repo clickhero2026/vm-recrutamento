@@ -197,6 +197,46 @@ html.tema-escuro .vm-funil__etapa--concluida .vm-funil__rotulo{ color:var(--vm-w
   border:1px solid var(--vm-orange);
 }
 
+/* Potencial de ganhos: bloco de grande destaque (fundo laranja, numeros grandes).
+   E a 2a coisa que o olho ve, logo abaixo do salario. */
+.vm-ganhos{
+  width:100%;
+  background:var(--vm-orange);
+  color:var(--vm-black);
+  border-radius:12px;
+  padding:1.5rem 1.75rem;
+}
+.vm-ganhos__rotulo{
+  font-family:var(--font-display);
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  font-weight:700;
+  font-size:.9rem;
+  margin-bottom:.4rem;
+}
+.vm-ganhos__valor{
+  font-family:var(--font-display);
+  font-weight:900;
+  line-height:1.05;
+  font-size:clamp(1.6rem, 5vw, 2.4rem);
+}
+
+/* Selos de detalhe da vaga (endereco/modalidade/regime/horario): chips escuros
+   para contrastar com o fundo off-white da pagina (tema-claro). */
+.vm-selos{ display:flex; flex-wrap:wrap; gap:.5rem; width:100%; }
+.vm-selo{
+  display:inline-flex;
+  align-items:center;
+  gap:.4rem;
+  font-size:.85rem;
+  font-weight:500;
+  padding:.4rem .8rem;
+  border-radius:999px;
+  background:var(--vm-black);
+  color:var(--vm-offwhite);
+  border:1px solid color-mix(in srgb, var(--vm-gray-mid) 35%, transparent);
+}
+
 /* CTA fixo no rodape, sempre visivel ao rolar (mobile e desktop). */
 .vm-cta-fixa{
   position:fixed; left:0; right:0; bottom:0; z-index:10;
