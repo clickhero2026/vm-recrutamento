@@ -281,6 +281,15 @@ function registrarConsentGravacao(id) {
   return info.changes;
 }
 
+// Marca o momento do ultimo envio do e-mail de retomada ("continuar depois").
+// Sobrescreve sempre (cada envio atualiza o timestamp); o controle de "nao reenviar
+// em 30 min" e feito por quem chama, comparando enviado_retomada_em com agora.
+function marcarRetomadaEnviada(id) {
+  getDb()
+    .prepare("UPDATE applications SET enviado_retomada_em = datetime('now') WHERE id = ?")
+    .run(id);
+}
+
 // Entrevistas
 function criarInterview(entrevista) {
   const info = getDb().prepare(`
@@ -620,6 +629,7 @@ module.exports = {
   obterAplicacaoPorToken,
   atualizarStatusAplicacao,
   registrarConsentGravacao,
+  marcarRetomadaEnviada,
   // entrevistas
   criarInterview,
   obterInterview,

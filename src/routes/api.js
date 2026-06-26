@@ -22,8 +22,13 @@ const { calcularCustoDeepSeek } = require('../lib/custos');
 const stt = require('../providers/stt');
 const tts = require('../providers/tts');
 const drive = require('../providers/drive');
+const email = require('../providers/email');
+const { escapeHtml } = require('../views');
 
 const router = express.Router();
+
+// Nao reenviar o e-mail de retomada se ja foi enviado nos ultimos 30 minutos.
+const RETOMADA_THROTTLE_MS = 30 * 60 * 1000;
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // 25 MB (resposta de audio push-to-talk)
@@ -253,6 +258,91 @@ router.post('/consentimento-gravacao', (req, res) => {
 
   db.registrarConsentGravacao(candidato.id);
   return res.json({ ok: true });
+});
+
+// Estimativa de duracao (faixa em minutos) a partir do roteiro. Espelha a logica da
+// pagina de preparacao (pages.js) para que o e-mail prometa o mesmo tempo da tela.
+function estimarDuracaoMin(roteiro) {
+  const n = entrevista.montarPerguntas(roteiro).length;
+  const base = n > 1 ? n : 6;
+  const min = Math.max(10, Math.round(base * 1.5));
+  const max = Math.max(min, Math.round(base * 2));
+  return { min, max };
+}
+
+// HTML do e-mail de retomada ("continuar depois"). Identidade visual: preto #0D0B0A,
+// laranja #FF5500, off-white #F4F3F1, Barlow/Barlow Condensed (com fallbacks p/ e-mail).
+function montarEmailRetomada({ nome, tituloVaga, min, max, link }) {
+  const ola = nome ? `Olá, ${escapeHtml(nome)}!` : 'Olá!';
+  const titulo = escapeHtml(tituloVaga);
+  return `
+  <div style="margin:0;padding:24px;background:#0D0B0A;font-family:'Barlow',Arial,Helvetica,sans-serif;color:#F4F3F1;">
+    <div style="max-width:520px;margin:0 auto;">
+      <h1 style="font-family:'Barlow Condensed','Barlow',Arial,sans-serif;font-weight:700;color:#FF5500;font-size:24px;margin:0 0 16px;">${ola}</h1>
+      <p style="font-size:16px;line-height:1.5;margin:0 0 16px;">Você iniciou sua candidatura para a vaga de <strong>${titulo}</strong> no Vendedor Mestre, mas sua entrevista ainda não foi realizada.</p>
+      <p style="font-size:16px;line-height:1.5;margin:0 0 24px;">A entrevista é conduzida pela Vera, nossa agente de recrutamento por vídeo e áudio, e leva aproximadamente ${min}–${max} minutos.</p>
+      <p style="margin:0 0 24px;">
+        <a href="${link}" style="display:inline-block;background:#FF5500;color:#0D0B0A;text-decoration:none;font-family:'Barlow Condensed','Barlow',Arial,sans-serif;font-weight:700;font-size:18px;padding:14px 28px;border-radius:8px;">Continuar minha entrevista</a>
+      </p>
+      <p style="font-size:14px;line-height:1.5;margin:0 0 24px;">Se o botão não funcionar, copie e cole este link no navegador:<br><span style="color:#FF5500;">${link}</span></p>
+      <p style="font-size:16px;line-height:1.5;margin:0 0 4px;">Se tiver qualquer dúvida, responda este e-mail.</p>
+      <p style="font-size:16px;line-height:1.5;margin:16px 0 0;">Até logo,<br><strong>Equipe Vendedor Mestre</strong></p>
+    </div>
+  </div>`;
+}
+
+// ── POST /api/retomar-depois ──
+// Camera obrigatoria: se o candidato nao consegue/permite a camera, manda um link de
+// retomada por e-mail (GET /retomar -> /permissao-camera). Throttle de 30 min via
+// applications.enviado_retomada_em (nao reenvia em rajada). Em mock NAO toca o Resend.
+router.post('/retomar-depois', async (req, res) => {
+  const candidato = candidatoApi(req, res);
+  if (!candidato) return undefined;
+
+  // Throttle: enviado ha menos de 30 min -> nao reenvia (resposta idempotente p/ a UI).
+  if (
+    candidato.enviado_retomada_em &&
+    entrevista.decorridoMs(candidato.enviado_retomada_em) < RETOMADA_THROTTLE_MS
+  ) {
+    return res.json({ ok: true, ja_enviado: true });
+  }
+
+  if (!candidato.email) {
+    return res
+      .status(400)
+      .json({ ok: false, erro: 'Não há e-mail cadastrado para enviar o link de retomada.' });
+  }
+
+  const vaga = db.obterVaga(candidato.job_id);
+  const tituloVaga = (vaga && vaga.titulo) || 'a vaga';
+  const roteiro = roteiroDaVaga(vaga);
+  const { min, max } = estimarDuracaoMin(roteiro);
+  const link = `${config.baseUrl}/retomar?token=${encodeURIComponent(candidato.token)}`;
+  const assunto = `Sua entrevista para ${tituloVaga} está esperando por você`;
+  const html = montarEmailRetomada({ nome: candidato.nome, tituloVaga, min, max, link });
+
+  try {
+    if (config.entrevista.mock) {
+      console.log(
+        `[retomar-depois] (mock) e-mail NAO enviado. destinatario=${candidato.email} link=${link}`,
+      );
+    } else {
+      await entrevista.comTimeout(
+        email.enviar(candidato.email, assunto, html),
+        config.entrevista.timeoutMs,
+        'Resend',
+      );
+    }
+    db.marcarRetomadaEnviada(candidato.id);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(
+      `[retomar-depois] falha ao enviar e-mail (application_id=${candidato.id}): ${err.message}`,
+    );
+    return res
+      .status(502)
+      .json({ ok: false, erro: 'Não foi possível enviar o e-mail agora. Tente novamente.' });
+  }
 });
 
 // ── POST /api/identificacao ──

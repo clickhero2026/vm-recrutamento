@@ -66,6 +66,10 @@ function migrar() {
   adicionarColunaSeFaltar('applications', 'consent_at', 'TEXT');
   adicionarColunaSeFaltar('applications', 'consent_gravacao_at', 'TEXT');
 
+  // Camera obrigatoria - e-mail de "continuar depois": momento do ultimo envio do
+  // link de retomada (ISO/UTC). Usado para nao reenviar dentro de 30 min. Idempotente.
+  adicionarColunaSeFaltar('applications', 'enviado_retomada_em', 'TEXT');
+
   // Indices de reports ficam aqui (e nao no schema.sql) porque dependem das
   // colunas acima, que em bancos antigos so passam a existir depois do ADD COLUMN.
   const db = getDb();
