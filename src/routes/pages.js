@@ -358,7 +358,7 @@ function paginaPreparacao(req) {
 
     <p class="vm-consentimento">Esta entrevista é gravada em áudio e, se você permitir a câmera, também em vídeo (imagem e áudio). As gravações são analisadas pela nossa equipe de recrutamento para fins de avaliação no processo seletivo.</p>
 
-    ${botao('/permissao-microfone', 'Pode começar')}`;
+    ${botao('/permissao-camera', 'Pode começar')}`;
 
   return pagina({ titulo: 'Preparação para a entrevista', tema: 'claro', etapa: 2, conteudo });
 }
