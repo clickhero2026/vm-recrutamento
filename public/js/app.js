@@ -152,11 +152,11 @@ const VM_MIDIA = {
       return (
         `Permissão de ${dispositivo} negada. Para reativar: toque no ícone de cadeado/` +
         `${dispositivo} na barra de endereço do navegador e permita o acesso (ou ajuste nas ` +
-        `configurações do navegador/sistema). Você também pode continuar sem câmera.`
+        `configurações do navegador/sistema).`
       );
     }
     if (nome === 'NotFoundError' || nome === 'DevicesNotFoundError') {
-      return `Nenhuma ${dispositivo} encontrada. Você pode continuar sem câmera.`;
+      return `Nenhuma ${dispositivo} encontrada.`;
     }
     if (nome === 'NotReadableError' || nome === 'TrackStartError') {
       return `Não foi possível acessar a ${dispositivo} (pode estar em uso por outro app).`;
@@ -171,21 +171,28 @@ const VM_MIDIA = {
   },
 };
 
-// ── Tela 6: Permissao de camera ──
+// ── Tela 6: Permissao de camera (OBRIGATORIA) ──
+// Camera concedida -> /teste-camera. Camera negada/indisponivel -> troca o pedido pela
+// tela de bloqueio (sem "pular"), com a opcao de receber o link de retomada por e-mail.
 (function () {
-  const btn = document.querySelector('[data-permitir-camera]');
+  const tela = document.querySelector('[data-tela-permissao-camera]');
+  if (!tela) return;
+  const btn = tela.querySelector('[data-permitir-camera]');
   if (!btn) return;
-  const erro = document.querySelector('[data-cam-erro]');
+  const pedido = tela.querySelector('[data-cam-pedido]');
+  const bloqueio = tela.querySelector('[data-cam-bloqueio]');
+  const btnEnviarLink = tela.querySelector('[data-enviar-link]');
+  const statusBloqueio = tela.querySelector('[data-cam-bloqueio-status]');
 
-  function mostrarErro(msg) {
-    erro.textContent = msg;
-    erro.hidden = !msg;
+  // Mostra a tela de bloqueio (camera necessaria) no lugar do pedido de permissao.
+  function mostrarBloqueio() {
+    if (pedido) pedido.hidden = true;
+    if (bloqueio) bloqueio.hidden = false;
   }
 
   btn.addEventListener('click', async () => {
-    mostrarErro('');
     if (!VM_MIDIA.suportado()) {
-      mostrarErro('Seu navegador não suporta acesso à câmera. Você pode continuar sem câmera.');
+      mostrarBloqueio();
       return;
     }
     btn.disabled = true;
@@ -196,11 +203,40 @@ const VM_MIDIA = {
       VM_MIDIA.pararTracks(stream);
       window.location = '/teste-camera';
     } catch (err) {
-      mostrarErro(VM_MIDIA.mensagemErro(err, 'camera'));
+      // Negada ou falhou: sem camera nao ha entrevista -> tela de bloqueio.
       btn.disabled = false;
-      btn.textContent = 'Permitir câmera';
+      btn.textContent = 'Permitir câmera e gravar';
+      mostrarBloqueio();
     }
   });
+
+  // "Receber link por e-mail para continuar depois" -> POST /api/retomar-depois.
+  function mostrarStatus(msg) {
+    if (!statusBloqueio) return;
+    statusBloqueio.textContent = msg;
+    statusBloqueio.hidden = !msg;
+  }
+  if (btnEnviarLink) {
+    btnEnviarLink.addEventListener('click', async () => {
+      mostrarStatus('');
+      btnEnviarLink.disabled = true;
+      btnEnviarLink.textContent = 'Enviando...';
+      try {
+        const resp = await fetch('/api/retomar-depois', { method: 'POST' });
+        const dados = await resp.json().catch(() => ({}));
+        if (resp.ok && dados.ok) {
+          btnEnviarLink.hidden = true;
+          mostrarStatus('E-mail enviado! Verifique sua caixa de entrada.');
+          return;
+        }
+        throw new Error('falha no envio');
+      } catch (e) {
+        btnEnviarLink.disabled = false;
+        btnEnviarLink.textContent = 'Receber link por e-mail para continuar depois';
+        mostrarStatus('Não conseguimos enviar o e-mail. Tente novamente.');
+      }
+    });
+  }
 })();
 
 // ── Tela 7: Teste de camera (preview ao vivo) ──
@@ -222,7 +258,7 @@ const VM_MIDIA = {
 
   async function iniciarPreview() {
     if (!VM_MIDIA.suportado()) {
-      mostrarErro('Seu navegador não suporta acesso à câmera. Você pode continuar sem câmera.');
+      mostrarErro('Seu navegador não suporta acesso à câmera. Tente outro navegador.');
       return;
     }
     try {
@@ -233,8 +269,8 @@ const VM_MIDIA = {
     }
   }
 
-  // Ao sair/continuar/pular: para as tracks (apaga a luz da webcam).
-  tela.querySelectorAll('[data-continuar], [data-pular]').forEach((link) => {
+  // Ao sair/continuar: para as tracks (apaga a luz da webcam).
+  tela.querySelectorAll('[data-continuar]').forEach((link) => {
     link.addEventListener('click', () => pararPreview());
   });
   window.addEventListener('pagehide', pararPreview);

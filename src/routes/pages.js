@@ -426,25 +426,40 @@ router.get('/retomar', (req, res) => {
 // quebrar links antigos (e-mail/marcador). O conteudo agora vive em /preparacao. ──
 router.get('/instrucoes', exigirCandidato, (req, res) => res.redirect(302, '/preparacao'));
 
-// ── Tela 6: Permissao de camera (opcional). Com a camera ligada, a entrevista e
-// GRAVADA em video para analise — o consentimento abaixo deixa isso explicito. ──
+// ── Tela 6: Permissao de camera (OBRIGATORIA). A entrevista e GRAVADA em video; sem
+// camera nao ha entrevista. Quando a permissao e negada/indisponivel, o JS troca o
+// pedido pela tela de bloqueio (data-cam-bloqueio) com a opcao de receber um link por
+// e-mail para retomar depois — nao existe mais "continuar sem camera". ──
 router.get('/permissao-camera', exigirCandidato, (req, res) => {
   const conteudo = `
-    <section class="vm-hero vm-hero--centro">
-      <p class="vm-kicker">Câmera</p>
-      <h1 class="vm-title">Permissão de câmera</h1>
-      <p class="vm-lead">Com a câmera ligada, sua entrevista é gravada em vídeo (imagem e áudio) e analisada pela nossa equipe de recrutamento como parte da avaliação. A câmera é opcional, mas recomendada.</p>
+    <section class="vm-hero vm-hero--centro" data-tela-permissao-camera>
+      <div data-cam-pedido>
+        <p class="vm-kicker">Câmera</p>
+        <h1 class="vm-title">Permissão de câmera</h1>
+        <p class="vm-lead">Sua entrevista é gravada em vídeo (imagem e áudio) e analisada pela nossa equipe de recrutamento como parte da avaliação. A câmera é obrigatória para realizar a entrevista.</p>
 
-      <p class="vm-form-erro" data-cam-erro hidden role="alert"></p>
+        <p class="vm-form-erro" data-cam-erro hidden role="alert"></p>
 
-      <div class="vm-acoes">
-        <button type="button" class="vm-btn vm-btn--primario" data-permitir-camera>Permitir câmera e gravar</button>
-        <a class="vm-btn vm-btn--secundario" href="/permissao-microfone" data-pular>Continuar sem câmera</a>
+        <div class="vm-acoes">
+          <button type="button" class="vm-btn vm-btn--primario" data-permitir-camera>Permitir câmera e gravar</button>
+        </div>
+
+        <p class="vm-rodape-nota">
+          No iPhone (Safari), a câmera exige conexão segura (HTTPS) e a permissão é solicitada ao tocar no botão.
+        </p>
       </div>
 
-      <p class="vm-rodape-nota">
-        No iPhone (Safari), a câmera exige conexão segura (HTTPS) e a permissão é solicitada ao tocar no botão.
-      </p>
+      <div data-cam-bloqueio hidden>
+        <p class="vm-kicker">Câmera</p>
+        <h1 class="vm-title">Câmera necessária</h1>
+        <p class="vm-lead">A entrevista é gravada em vídeo e áudio, então a câmera é obrigatória. Se você não pode usar a câmera agora, enviamos um link para o seu e-mail para continuar a entrevista depois, em um dispositivo com câmera.</p>
+
+        <div class="vm-acoes">
+          <button type="button" class="vm-btn vm-btn--primario" data-enviar-link>Receber link por e-mail para continuar depois</button>
+        </div>
+
+        <p class="vm-status" data-cam-bloqueio-status aria-live="polite" hidden></p>
+      </div>
     </section>`;
 
   res.send(pagina({ titulo: 'Permissão de câmera', tema: 'claro', etapa: 3, conteudo }));
@@ -467,7 +482,6 @@ router.get('/teste-camera', exigirCandidato, (req, res) => {
 
       <div class="vm-acoes">
         <a class="vm-btn vm-btn--primario" href="/permissao-microfone" data-continuar>Continuar</a>
-        <a class="vm-btn vm-btn--secundario" href="/permissao-microfone" data-pular>Continuar sem câmera</a>
       </div>
     </section>`;
 
