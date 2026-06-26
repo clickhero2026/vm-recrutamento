@@ -201,7 +201,7 @@ html.tema-escuro .vm-funil__etapa--concluida .vm-funil__rotulo{ color:var(--vm-w
    E a 2a coisa que o olho ve, logo abaixo do salario. */
 .vm-ganhos{
   width:100%;
-  background:var(--vm-orange);
+  background:rgba(255, 85, 0, 0.12);
   color:var(--vm-black);
   border-radius:12px;
   padding:1.5rem 1.75rem;
@@ -216,9 +216,10 @@ html.tema-escuro .vm-funil__etapa--concluida .vm-funil__rotulo{ color:var(--vm-w
 }
 .vm-ganhos__valor{
   font-family:var(--font-display);
-  font-weight:900;
+  font-weight:500;
   line-height:1.05;
-  font-size:clamp(1.6rem, 5vw, 2.4rem);
+  font-size:clamp(1.28rem, 4vw, 1.92rem);
+  color:var(--vm-orange);
 }
 
 /* Selos de detalhe da vaga (endereco/modalidade/regime/horario): chips escuros
