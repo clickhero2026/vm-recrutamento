@@ -576,6 +576,8 @@ html.tema-escuro .vm-aviso{ background:color-mix(in srgb, var(--vm-white) 6%, tr
 }
 .vm-chips--progresso{ flex:1 1 auto; gap:.4rem; }
 .vm-chips--progresso .vm-chip{ font-size:.7rem; padding:.25rem .55rem; }
+/* Oculta visualmente os chips de progresso na entrevista (logica JS/timer intactos). */
+.vm-chips--progresso{ display:none; }
 .vm-chip--concluido{ background:var(--vm-orange); color:var(--vm-black); border-color:var(--vm-orange); }
 .vm-chip--atual{ border-color:var(--vm-orange); color:var(--vm-orange); font-weight:700; }
 .vm-chip--futuro{ border-color:var(--vm-gray-mid); color:var(--vm-gray-mid); }

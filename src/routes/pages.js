@@ -333,7 +333,7 @@ function paginaPreparacao(req) {
       <div class="vm-card">
         <dl class="vm-info">
           <dt>Formato</dt>
-          <dd>Entrevista por áudio com a Vera, nossa agente de recrutamento.</dd>
+          <dd>Entrevista por áudio e vídeo com a Vera, nossa agente de recrutamento. Você interage pelo botão “toque para falar”.</dd>
           <dt>Duração estimada</dt>
           <dd>~${min}–${max} minutos.</dd>
           <dt>Áreas de foco</dt>
@@ -346,7 +346,7 @@ function paginaPreparacao(req) {
       <h2 class="vm-h2">Antes de começar</h2>
       <ul class="vm-lista">
         <li>Escolha um ambiente silencioso, sem interrupções, com internet estável.</li>
-        <li>É por áudio: use o botão <b>“toque para falar”</b> — toque para começar a responder e toque de novo para terminar cada resposta.</li>
+        <li>É por áudio e vídeo: use o botão <b>“toque para falar”</b> — toque para começar a responder e toque de novo para terminar cada resposta.</li>
         <li>Precisa de mais clareza? Peça à Vera para repetir a pergunta.</li>
         <li>Permita o acesso ao microfone quando solicitado. A câmera é opcional, mas, se permitida, sua entrevista será gravada em vídeo (imagem e áudio).</li>
         <li>Funciona no celular ou no computador.</li>
@@ -462,7 +462,7 @@ router.get('/permissao-microfone', exigirCandidato, (req, res) => {
     <section class="vm-hero vm-hero--centro">
       <p class="vm-kicker">Microfone</p>
       <h1 class="vm-title">Permissão de microfone</h1>
-      <p class="vm-lead">A entrevista é por áudio. Precisamos do seu microfone para ouvir as suas respostas.</p>
+      <p class="vm-lead">A entrevista é por áudio e vídeo. Precisamos do seu microfone para ouvir as suas respostas.</p>
 
       <p class="vm-form-erro" data-mic-erro hidden role="alert"></p>
 
@@ -570,7 +570,7 @@ router.get('/entrevista', exigirCandidato, (req, res) => {
         </div>
         <p class="vm-kicker">Agente Vera</p>
         <p class="vm-iniciar__frase">Toque para começar. A Vera vai te ouvir e conduzir a conversa.</p>
-        <button type="button" class="vm-btn vm-btn--primario" data-iniciar-btn>Começar com a Vera</button>
+        <button type="button" class="vm-btn vm-btn--primario" data-iniciar-btn>Começar a Entrevista</button>
       </div>
 
       <audio data-audio playsinline></audio>
