@@ -50,6 +50,13 @@ function migrar() {
   adicionarColunaSeFaltar('jobs', 'requisitos', 'TEXT'); // JSON (array de strings)
   adicionarColunaSeFaltar('jobs', 'secoes_extras', 'TEXT'); // JSON (array de {titulo, itens})
 
+  // Detalhes da vaga (texto simples, opcionais; exibidos como selos na /vaga/:slug).
+  // modalidade: 'presencial'|'hibrido'|'remoto'; regime: 'CLT'|'PJ'. Idempotente.
+  adicionarColunaSeFaltar('jobs', 'endereco', 'TEXT');
+  adicionarColunaSeFaltar('jobs', 'modalidade', 'TEXT'); // 'presencial'|'híbrido'|'remoto'
+  adicionarColunaSeFaltar('jobs', 'regime', 'TEXT'); // 'CLT'|'PJ'
+  adicionarColunaSeFaltar('jobs', 'horario', 'TEXT');
+
   // Fase 5 - gravacao de video: link compartilhavel do Google Drive por entrevista.
   adicionarColunaSeFaltar('interviews', 'video_url', 'TEXT');
 

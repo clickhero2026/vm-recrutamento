@@ -48,8 +48,9 @@ function jobDeLinha(linha) {
   if (!linha) return null;
   return {
     ...linha,
-    // Arrays estruturados (uma string por item). potencial_ganhos e texto livre,
-    // entao fica como veio na linha (...linha).
+    // Arrays estruturados (uma string por item). Campos de texto livre
+    // (potencial_ganhos, endereco, modalidade, regime, horario) ficam como vieram
+    // na linha (...linha) — sem parse.
     skills: lerJson(linha.skills, []),
     beneficios: lerJson(linha.beneficios, []),
     atividades: lerJson(linha.atividades, []),
@@ -100,10 +101,12 @@ function criarVaga(vaga) {
     INSERT INTO jobs
       (slug, titulo, perfil, faixa_pagamento, potencial_ganhos, skills,
        beneficios, atividades, requisitos, secoes_extras,
+       endereco, modalidade, regime, horario,
        descricao, sobre_empresa, roteiro_id, ativo)
     VALUES
       (@slug, @titulo, @perfil, @faixa_pagamento, @potencial_ganhos, @skills,
        @beneficios, @atividades, @requisitos, @secoes_extras,
+       @endereco, @modalidade, @regime, @horario,
        @descricao, @sobre_empresa, @roteiro_id, @ativo)
   `);
   const info = stmt.run({
@@ -112,6 +115,10 @@ function criarVaga(vaga) {
     perfil: vaga.perfil,
     faixa_pagamento: vaga.faixa_pagamento || null,
     potencial_ganhos: vaga.potencial_ganhos || null,
+    endereco: vaga.endereco || null,
+    modalidade: vaga.modalidade || null,
+    regime: vaga.regime || null,
+    horario: vaga.horario || null,
     skills: JSON.stringify(vaga.skills || []),
     beneficios: JSON.stringify(vaga.beneficios || []),
     atividades: JSON.stringify(vaga.atividades || []),
@@ -140,6 +147,10 @@ function atualizarVaga(id, campos) {
          atividades       = @atividades,
          requisitos       = @requisitos,
          secoes_extras    = @secoes_extras,
+         endereco         = @endereco,
+         modalidade       = @modalidade,
+         regime           = @regime,
+         horario          = @horario,
          descricao        = @descricao,
          sobre_empresa    = @sobre_empresa,
          ativo            = @ativo
@@ -150,6 +161,10 @@ function atualizarVaga(id, campos) {
       titulo: campos.titulo,
       faixa_pagamento: campos.faixa_pagamento || null,
       potencial_ganhos: campos.potencial_ganhos || null,
+      endereco: campos.endereco || null,
+      modalidade: campos.modalidade || null,
+      regime: campos.regime || null,
+      horario: campos.horario || null,
       skills: JSON.stringify(campos.skills || []),
       beneficios: JSON.stringify(campos.beneficios || []),
       atividades: JSON.stringify(campos.atividades || []),
