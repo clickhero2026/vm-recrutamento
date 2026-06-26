@@ -404,6 +404,24 @@ router.get('/identificacao', (req, res) => {
   res.send(pagina({ titulo: 'Identificação', tema: 'claro', etapa: 1, conteudo }));
 });
 
+// ── Retomada automatica por link (e-mail "continuar depois") ──
+// Valida o token da query (mesmo token opaco da application), restaura o cookie de
+// sessao e manda direto para /permissao-camera — SEM passar pela tela de
+// Identificacao: o link unico e nao-adivinhavel ja autentica o candidato.
+router.get('/retomar', (req, res) => {
+  const token = String(req.query.token || '').trim();
+  const aplicacao = token ? db.obterAplicacaoPorToken(token) : null;
+  if (!aplicacao) {
+    return paginaAviso(res, 404, {
+      titulo: 'Link inválido ou expirado',
+      descricao:
+        'Este link de retomada não é válido. Confira o link enviado por e-mail ou refaça sua identificação.',
+    });
+  }
+  session.setToken(res, aplicacao.token);
+  return res.redirect('/permissao-camera');
+});
+
 // ── Tela 5: Instrucoes — FUNDIDA em /preparacao. Mantida como redirect 302 p/ nao
 // quebrar links antigos (e-mail/marcador). O conteudo agora vive em /preparacao. ──
 router.get('/instrucoes', exigirCandidato, (req, res) => res.redirect(302, '/preparacao'));
