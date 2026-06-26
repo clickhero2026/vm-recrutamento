@@ -294,6 +294,23 @@ function roteiroDaVaga(vaga) {
   return vaga && vaga.roteiro_id ? db.obterRoteiro(vaga.roteiro_id) : null;
 }
 
+// Interpola placeholders do roteiro com dados reais do candidato. Hoje so [nome]
+// (case-insensitive) -> primeiro nome do candidato; novos placeholders entram aqui.
+function interpolarTexto(texto, candidato) {
+  const nome = String((candidato && candidato.nome) || '').trim();
+  return String(texto || '').replace(/\[nome\]/gi, nome);
+}
+
+// Perguntas do roteiro com os placeholders ja interpolados (ex.: [nome]). Usado em
+// vez de entrevista.montarPerguntas direto, para que a abertura e as demais perguntas
+// roteirizadas saiam com o nome real do candidato (gravadas, faladas e exibidas).
+function perguntasInterpoladas(roteiro, candidato) {
+  return entrevista.montarPerguntas(roteiro).map((p) => ({
+    ...p,
+    texto: interpolarTexto(p.texto, candidato),
+  }));
+}
+
 // Sintetiza a fala da Vera (TTS real), salva o MP3 no volume e devolve a URL servida.
 async function sintetizarESalvar(texto, interviewId, ordem) {
   const { audio } = await entrevista.comTimeout(
@@ -411,7 +428,7 @@ router.post('/interview/start', async (req, res) => {
 
     const vaga = db.obterVaga(candidato.job_id);
     const roteiro = roteiroDaVaga(vaga);
-    const perguntas = entrevista.montarPerguntas(roteiro);
+    const perguntas = perguntasInterpoladas(roteiro, candidato);
 
     const interviewId = db.criarInterview({
       application_id: candidato.id,
@@ -507,7 +524,7 @@ router.post('/interview/answer', (req, res) => {
     const forcarAvancar = String(req.body.forcar_avancar || '') === '1';
 
     const roteiro = entrevistaRow.roteiro_id ? db.obterRoteiro(entrevistaRow.roteiro_id) : null;
-    const perguntas = entrevista.montarPerguntas(roteiro);
+    const perguntas = perguntasInterpoladas(roteiro, candidato);
 
     // Quantas perguntas a Vera ja fez -> proxima e o indice seguinte (0-based).
     const proximoIndice = db.contarTurnos(interviewId, 'agente');
