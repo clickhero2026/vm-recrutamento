@@ -851,8 +851,8 @@ const VM_MIDIA = {
       return;
     }
     setOrbe('pensando');
-    estadoTexto.textContent = 'Processando sua gravação…';
-    elPergunta.textContent = 'Processando sua gravação de vídeo…';
+    estadoTexto.textContent = 'Salvando sua entrevista…';
+    elPergunta.textContent = 'Salvando sua entrevista…';
     try {
       videoRecorder.stop();
     } catch (e) {
@@ -919,9 +919,16 @@ const VM_MIDIA = {
       if (timerId) clearInterval(timerId);
       btnPtt.hidden = true;
       btnRepetir.hidden = true;
-      // Para a gravacao de video e sobe ao servidor antes de redirecionar (o blob de
-      // video so existe nesta pagina; navegar antes o perderia). Sem video: vai direto.
-      encerrarComVideo();
+      // Mostra a despedida da Vera e toca o audio; so encerra (para a gravacao, sobe o
+      // video e redireciona) DEPOIS que o audio termina, para o candidato ouvir o
+      // fechamento. Sem audio (TTS falhou/nulo): encerra direto, sem travar — mesmo
+      // fallback usado no restante do codigo para audio ausente.
+      elPergunta.textContent = dados.pergunta || '';
+      if (dados.audio_url) {
+        tocarFala(dados.audio_url, encerrarComVideo);
+      } else {
+        encerrarComVideo();
+      }
       return;
     }
     elPergunta.textContent = dados.pergunta || '';
