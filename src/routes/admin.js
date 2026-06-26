@@ -144,8 +144,8 @@ const ESTILO_ADMIN = `
   .turno--cand .turno-autor { color:var(--offwhite); }
   .campo { display:block; margin-bottom:1rem; }
   .campo > span { display:block; color:var(--cinza); font-size:.85rem; text-transform:uppercase; margin-bottom:.3rem; }
-  .campo input[type=text], .campo input[type=password], .campo textarea { width:100%; background:var(--campo); color:var(--offwhite); border:1px solid var(--linha); border-radius:6px; padding:.6rem .7rem; font:inherit; }
-  .campo input[type=text]:focus, .campo input[type=password]:focus, .campo textarea:focus { outline:none; border-color:var(--laranja); }
+  .campo input[type=text], .campo input[type=password], .campo select, .campo textarea { width:100%; background:var(--campo); color:var(--offwhite); border:1px solid var(--linha); border-radius:6px; padding:.6rem .7rem; font:inherit; }
+  .campo input[type=text]:focus, .campo input[type=password]:focus, .campo select:focus, .campo textarea:focus { outline:none; border-color:var(--laranja); }
   .campo-check { display:flex; align-items:center; gap:.5rem; margin-bottom:1.2rem; }
   .aviso-ok { background:var(--linha); border-left:3px solid var(--laranja); padding:.6rem .9rem; border-radius:4px; margin-bottom:1rem; }
   .aviso-alerta { background:var(--campo); border:1px solid var(--laranja); border-left:4px solid var(--laranja); color:var(--offwhite); padding:.6rem .9rem; border-radius:4px; margin-bottom:1rem; font-size:.92rem; }
@@ -486,6 +486,18 @@ router.get('/relatorio/:interviewId', (req, res) => {
 
 const PERFIS_VALIDOS = ['SDR', 'CLOSER'];
 
+// Opcoes dos selects de detalhe da vaga (fonte unica: formulario + validacao do POST).
+// Pares [value, rotulo]. O value e o que vai para o banco e para os selos da /vaga.
+const MODALIDADES = [
+  ['presencial', 'Presencial'],
+  ['híbrido', 'Híbrido'],
+  ['remoto', 'Remoto'],
+];
+const REGIMES = [
+  ['CLT', 'CLT'],
+  ['PJ', 'PJ'],
+];
+
 // Gera um slug-base a partir do titulo: sem acentos, minusculo, so [a-z0-9-].
 function gerarSlugBase(titulo) {
   const base = String(titulo || '')
@@ -555,14 +567,34 @@ function secoesExtrasParaTexto(secoes) {
 // "um item por linha" via arrayDeLinhas (declarado adiante; hoisted); potencial_ganhos
 // e texto livre; secoes_extras usa o parser proprio acima.
 function lerCamposRicos(b) {
+  // modalidade/regime so valem se baterem com as opcoes conhecidas; senao ficam vazios.
+  const modalidade = MODALIDADES.some(([v]) => v === b.modalidade) ? b.modalidade : '';
+  const regime = REGIMES.some(([v]) => v === b.regime) ? b.regime : '';
   return {
     potencial_ganhos: String(b.potencial_ganhos || '').trim(),
+    endereco: String(b.endereco || '').trim(),
+    modalidade,
+    regime,
+    horario: String(b.horario || '').trim(),
     skills: arrayDeLinhas(b.skills),
     beneficios: arrayDeLinhas(b.beneficios),
     atividades: arrayDeLinhas(b.atividades),
     requisitos: arrayDeLinhas(b.requisitos),
     secoes_extras: parseSecoesExtras(b.secoes_extras),
   };
+}
+
+// Monta as <option> de um select com placeholder "— selecione —" (value vazio) e
+// marca como selecionada a opcao cujo value bate com o valor atual da vaga.
+function opcoesSelect(atual, pares) {
+  const placeholder = '<option value="">— selecione —</option>';
+  const opcoes = pares
+    .map(
+      ([v, rotulo]) =>
+        `<option value="${escapeHtml(v)}"${(atual || '') === v ? ' selected' : ''}>${escapeHtml(rotulo)}</option>`,
+    )
+    .join('');
+  return placeholder + opcoes;
 }
 
 // Campos do formulario de vaga (compartilhados entre criar e editar). No modo "novo"
@@ -599,6 +631,26 @@ function camposVagaHtml(vaga, { perfilEditavel }) {
     <label class="campo">
       <span>Potencial de ganhos</span>
       <textarea name="potencial_ganhos" rows="2" placeholder="Ex.: comissões sem teto — top performers faturam R$ 15.000+/mês">${escapeHtml(vaga.potencial_ganhos || '')}</textarea>
+    </label>
+
+    <label class="campo">
+      <span>Endereço / Localização</span>
+      <input type="text" name="endereco" value="${escapeHtml(vaga.endereco || '')}" placeholder="Ex.: Av. Paulista, 1000 — São Paulo/SP">
+    </label>
+
+    <label class="campo">
+      <span>Modalidade</span>
+      <select name="modalidade">${opcoesSelect(vaga.modalidade, MODALIDADES)}</select>
+    </label>
+
+    <label class="campo">
+      <span>Regime</span>
+      <select name="regime">${opcoesSelect(vaga.regime, REGIMES)}</select>
+    </label>
+
+    <label class="campo">
+      <span>Horário de trabalho</span>
+      <input type="text" name="horario" value="${escapeHtml(vaga.horario || '')}" placeholder="ex.: Segunda a Sexta, 8h às 18h">
     </label>
 
     <label class="campo">
