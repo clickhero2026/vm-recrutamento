@@ -132,8 +132,8 @@ const config = {
     },
     email: {
       nome: 'resend',
-      // Remetente do relatorio (dominio verificado no Resend). Default sugerido na Fase 4.
-      remetente: process.env.RESEND_FROM_EMAIL || 'relatorios@vendedormestre.com.br',
+      // Remetente de TODOS os e-mails (relatorio + retomada). Dominio verificado no Resend.
+      remetente: process.env.RESEND_FROM_EMAIL || 'jean@vendedormestre.com.br',
       resend: { apiKey: process.env.RESEND_API_KEY || '' },
     },
   },
