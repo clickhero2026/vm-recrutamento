@@ -581,6 +581,13 @@ router.get('/entrevista', exigirCandidato, (req, res) => {
       <p class="vm-kicker">Vera pergunta</p>
       <p class="vm-pergunta" data-pergunta>Preparando sua entrevista…</p>
 
+      <div class="vm-progresso" data-progresso hidden>
+        <div class="vm-progresso__trilho" role="progressbar" aria-valuemin="0" aria-valuemax="100" data-progresso-barra-wrap>
+          <div class="vm-progresso__barra" data-progresso-barra></div>
+        </div>
+        <span class="vm-progresso__rotulo" data-progresso-rotulo aria-live="polite"></span>
+      </div>
+
       <p class="vm-form-erro" data-erro hidden role="alert"></p>
 
       <div class="vm-entrevista__controles">

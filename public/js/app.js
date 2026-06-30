@@ -584,6 +584,10 @@ const VM_MIDIA = {
   const orbe = tela.querySelector('[data-orbe]');
   const estadoTexto = tela.querySelector('[data-estado-texto]');
   const elPergunta = tela.querySelector('[data-pergunta]');
+  const elProgresso = tela.querySelector('[data-progresso]');
+  const elProgressoBarraWrap = tela.querySelector('[data-progresso-barra-wrap]');
+  const elProgressoBarra = tela.querySelector('[data-progresso-barra]');
+  const elProgressoRotulo = tela.querySelector('[data-progresso-rotulo]');
   const elChips = tela.querySelector('[data-chips]');
   const elTimer = tela.querySelector('[data-timer]');
   const elErro = tela.querySelector('[data-erro]');
@@ -863,7 +867,26 @@ const VM_MIDIA = {
   // Monta o blob de video e o envia ao servidor; redireciona ao terminar (sucesso OU
   // falha — a gravacao NUNCA bloqueia a finalizacao). Timeout generoso (~6 min) para
   // o upload + Drive; se estourar, redireciona mesmo assim.
-  async function enviarVideoEFechar() {
+  function mostrarProgresso() {
+    if (elProgresso) elProgresso.hidden = false;
+    atualizarProgresso(0);
+  }
+
+  function atualizarProgresso(pct) {
+    if (elProgresso) elProgresso.classList.remove('vm-progresso--indeterminado');
+    if (elProgressoBarra) elProgressoBarra.style.width = pct + '%';
+    if (elProgressoBarraWrap) elProgressoBarraWrap.setAttribute('aria-valuenow', String(pct));
+    if (elProgressoRotulo) elProgressoRotulo.textContent = 'Enviando vídeo… ' + pct + '%';
+  }
+
+  function progressoIndeterminado() {
+    if (elProgresso) elProgresso.classList.add('vm-progresso--indeterminado');
+    if (elProgressoBarra) elProgressoBarra.style.width = '';
+    if (elProgressoBarraWrap) elProgressoBarraWrap.removeAttribute('aria-valuenow');
+    if (elProgressoRotulo) elProgressoRotulo.textContent = 'Finalizando…';
+  }
+
+  function enviarVideoEFechar() {
     VM_MIDIA.pararTracks(camStream);
     camStream = null;
 
@@ -881,20 +904,38 @@ const VM_MIDIA = {
     form.append('interview_id', interviewId);
     form.append('video', blob, `entrevista.${ext}`);
 
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 6 * 60 * 1000);
-    try {
-      await fetch('/api/interview/video-upload', {
-        method: 'POST',
-        body: form,
-        signal: ctrl.signal,
-      });
-    } catch (e) {
-      // Best-effort: ignora qualquer erro de upload e segue para a finalizacao.
-    } finally {
-      clearTimeout(t);
+    // Best-effort: qualquer desfecho (sucesso, erro, timeout ou abort) redireciona
+    // uma unica vez para /finalizacao. NUNCA bloqueia/erra para o candidato.
+    let concluido = false;
+    function concluir() {
+      if (concluido) return;
+      concluido = true;
       finalizarRedirect();
     }
+
+    mostrarProgresso();
+    let indeterminado = false;
+
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = function (e) {
+      if (!e.lengthComputable) return;
+      const pct = Math.round((e.loaded / e.total) * 100);
+      if (pct >= 100) {
+        if (!indeterminado) {
+          indeterminado = true;
+          progressoIndeterminado();
+        }
+      } else {
+        atualizarProgresso(pct);
+      }
+    };
+    xhr.onload = concluir;
+    xhr.onerror = concluir;
+    xhr.ontimeout = concluir;
+    xhr.onabort = concluir;
+    xhr.open('POST', '/api/interview/video-upload');
+    xhr.timeout = 6 * 60 * 1000;
+    xhr.send(form);
   }
 
   function aplicarResposta(dados) {
