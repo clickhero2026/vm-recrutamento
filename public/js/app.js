@@ -812,10 +812,10 @@ const VM_MIDIA = {
       }
       if (!permitida) return;
 
-      // Resolucao limitada a 720p (controla tamanho/banda); audio junto p/ a fala entrar
+      // Resolucao limitada a 480p (controla tamanho/banda); audio junto p/ a fala entrar
       // na gravacao. O elemento de preview e muted (sem eco).
       camStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { width: { ideal: 854 }, height: { ideal: 480 } },
         audio: true,
       });
       camVideo.srcObject = camStream;
@@ -823,7 +823,10 @@ const VM_MIDIA = {
 
       if (!window.MediaRecorder) return; // sem MediaRecorder: so o thumbnail
       const mime = escolherMimeVideo();
-      const opcoes = { videoBitsPerSecond: 1000000 }; // ~1 Mbps p/ controlar tamanho
+      const opcoes = {
+        videoBitsPerSecond: 500000,   // ~0,5 Mbps p/ encolher o arquivo
+        audioBitsPerSecond: 64000,    // ~64 kbps de áudio
+      };
       if (mime) opcoes.mimeType = mime;
       videoRecorder = new MediaRecorder(camStream, opcoes);
       videoChunks = [];
