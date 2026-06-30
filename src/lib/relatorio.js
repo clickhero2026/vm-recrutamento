@@ -273,6 +273,7 @@ async function gerarRelatorio(interviewId, deps = {}) {
   const mock =
     deps.usarMockDeterministico != null ? deps.usarMockDeterministico : config.entrevista.mock;
   const timeoutMs = config.entrevista.timeoutMs;
+  const relatorioTimeoutMs = config.entrevista.relatorioTimeoutMs;
   const agente = config.agente.nome;
 
   // ── Idempotencia: se ja existe report ENVIADO para esta entrevista, nao gera de novo. ──
@@ -300,7 +301,7 @@ async function gerarRelatorio(interviewId, deps = {}) {
     const mensagens = montarMensagensAvaliacao({ roteiro, vaga, candidato, turns, agente });
     const resp = await comTimeout(
       llm.completar(mensagens, { temperatura: 0.2, maxTokens: 1500 }),
-      timeoutMs,
+      relatorioTimeoutMs,
       'LLM (relatorio)',
     );
 
