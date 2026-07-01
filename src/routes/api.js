@@ -65,36 +65,9 @@ const uploadAudio = multer({
   },
 }).single('audio');
 
-// Upload da gravacao de VIDEO da entrevista (webm/mp4). Vai para DISCO temporario
-// (nao memoria): o arquivo e grande e e enviado ao Drive via stream, depois apagado.
-const uploadVideo = multer({
-  storage: multer.diskStorage({
-    destination: os.tmpdir(),
-    filename(req, file, cb) {
-      const ext = /mp4/.test(file.mimetype) ? 'mp4' : 'webm';
-      cb(null, `vm-video-${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`);
-    },
-  }),
-  limits: { fileSize: MAX_VIDEO_BYTES },
-  fileFilter(req, file, cb) {
-    // [TEMP-DEBUG] instrumentacao p/ diagnosticar 400 "Formato de video invalido." — REMOVER apos diagnostico
-    console.log(
-      '[DEBUG-video-upload-mimetype]',
-      JSON.stringify({
-        fieldname: file.fieldname,
-        originalname: file.originalname,
-        mimetype: file.mimetype,
-        reqContentType: req.headers['content-type'],
-      }),
-    );
-    if (!/^video\//.test(file.mimetype)) {
-      const erro = new Error('Formato de vídeo inválido.');
-      erro.code = 'TIPO_INVALIDO';
-      return cb(erro);
-    }
-    cb(null, true);
-  },
-}).single('video');
+// (O video da entrevista NAO usa multer: e recebido como corpo cru da requisicao —
+// ver POST /interview/video-upload. Isso evita a corrupcao do Content-Type de partes
+// multipart pelo edge do Railway, que fazia o multer receber "text/plain".)
 
 // Remove um arquivo temporario sem nunca lancar (best-effort).
 function removerTemp(caminho) {
@@ -965,57 +938,115 @@ router.get('/interview/audio-padrao/nao-ouvi.mp3', async (req, res) => {
   }
 });
 
-// ── POST /api/interview/video-upload ── recebe a gravacao de video e sobe ao Drive
+// ── POST /api/interview/video-upload ── recebe a gravacao de video e sobe ao Drive.
+// CORPO CRU (sem multipart/FormData): o Blob do video vem como corpo da requisicao;
+// mimetype no header Content-Type e tamanho no Content-Length. Isso evita a corrupcao
+// do Content-Type de partes multipart pelo edge do Railway (que fazia o multer receber
+// "text/plain" -> 400) e reduz a superficie do ERR_HTTP2 intermitente. O interview_id
+// vem na query string (?interview_id=<n>).
 // Best-effort: a feature de video NUNCA bloqueia a finalizacao. Qualquer falha (mock,
 // erro de upload, timeout) responde ok:true (uploaded:false) para o front so redirecionar.
 router.post('/interview/video-upload', (req, res) => {
-  uploadVideo(req, res, async (err) => {
-    if (err) {
-      if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ ok: false, erro: 'O vídeo da entrevista é muito grande.' });
-      }
-      if (err.code === 'TIPO_INVALIDO') {
-        return res.status(400).json({ ok: false, erro: err.message });
-      }
-      return res.status(400).json({ ok: false, erro: 'Não foi possível processar o vídeo.' });
-    }
+  const ct = String(req.headers['content-type'] || '');
 
-    const candidato = candidatoApi(req, res);
-    if (!candidato) {
-      if (req.file) removerTemp(req.file.path);
-      return undefined;
-    }
+  // [TEMP-DEBUG] instrumentacao p/ diagnosticar mimetype do video-upload — REMOVER apos diagnostico
+  console.log(
+    '[DEBUG-video-upload-mimetype]',
+    JSON.stringify({
+      reqContentType: ct,
+      contentLength: req.headers['content-length'],
+      interviewIdQuery: req.query.interview_id,
+    }),
+  );
 
-    const interviewId = Number(req.body.interview_id);
-    const entrevistaRow = db.obterInterview(interviewId);
-    if (!entrevistaRow || entrevistaRow.application_id !== candidato.id) {
-      if (req.file) removerTemp(req.file.path);
-      return res.status(404).json({ ok: false, erro: 'Entrevista não encontrada.' });
-    }
+  // 1) Tipo: agora no header da requisicao inteira (nao numa sub-parte multipart).
+  if (!/^video\//.test(ct)) {
+    req.resume(); // drena o corpo p/ nao pendurar a conexao
+    return res.status(400).json({ ok: false, erro: 'Formato de vídeo inválido.' });
+  }
 
-    if (!req.file) {
+  // 2) Tamanho declarado (mesmo teto de 300 MB). O Content-Length pode faltar (chunked);
+  //    por isso tambem contamos os bytes durante o stream (abaixo).
+  const declarado = Number(req.headers['content-length']);
+  if (Number.isFinite(declarado) && declarado > MAX_VIDEO_BYTES) {
+    req.resume();
+    return res.status(400).json({ ok: false, erro: 'O vídeo da entrevista é muito grande.' });
+  }
+
+  // 3) Auth + entrevista ANTES de gravar (fail-fast: nao recebe 300 MB p/ request invalido).
+  const candidato = candidatoApi(req, res);
+  if (!candidato) {
+    req.resume();
+    return undefined;
+  }
+  const interviewId = Number(req.query.interview_id);
+  const entrevistaRow = db.obterInterview(interviewId);
+  if (!entrevistaRow || entrevistaRow.application_id !== candidato.id) {
+    req.resume();
+    return res.status(404).json({ ok: false, erro: 'Entrevista não encontrada.' });
+  }
+
+  // 4) Grava o corpo cru em arquivo temporario, com teto de tamanho durante o stream.
+  const ext = /mp4/.test(ct) ? 'mp4' : 'webm';
+  const destino = path.join(
+    os.tmpdir(),
+    `vm-video-${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`,
+  );
+  const ws = fs.createWriteStream(destino);
+  let recebido = 0;
+  let finalizado = false;
+
+  const abortar = (status, mensagem) => {
+    if (finalizado) return;
+    finalizado = true;
+    req.unpipe(ws);
+    ws.destroy();
+    removerTemp(destino);
+    if (!res.headersSent) res.status(status).json({ ok: false, erro: mensagem });
+    req.resume(); // descarta o resto do corpo
+  };
+
+  req.on('data', (chunk) => {
+    recebido += chunk.length;
+    if (recebido > MAX_VIDEO_BYTES) abortar(400, 'O vídeo da entrevista é muito grande.');
+  });
+  req.on('aborted', () => {
+    // Cliente abortou (ex.: fechou a aba). Best-effort: limpa e nao responde.
+    if (finalizado) return;
+    finalizado = true;
+    ws.destroy();
+    removerTemp(destino);
+  });
+  req.on('error', () => abortar(400, 'Não foi possível processar o vídeo.'));
+  ws.on('error', () => abortar(400, 'Não foi possível processar o vídeo.'));
+  req.pipe(ws);
+
+  ws.on('finish', async () => {
+    if (finalizado) return;
+    finalizado = true;
+
+    if (recebido === 0) {
+      removerTemp(destino);
       return res.status(400).json({ ok: false, erro: 'Nenhum vídeo recebido.' });
     }
+
+    const mimeType = ct.split(';')[0].trim(); // 'video/webm' sem parametros (codecs)
 
     // MODO MOCK: NAO toca o Drive (bloqueio de chamadas externas). Descarta o arquivo.
     if (config.entrevista.mock) {
       console.log(
-        `[video-upload] (mock) vídeo recebido p/ interview ${interviewId} (${req.file.size} bytes) — Drive NÃO acionado.`,
+        `[video-upload] (mock) vídeo recebido p/ interview ${interviewId} (${recebido} bytes) — Drive NÃO acionado.`,
       );
-      removerTemp(req.file.path);
+      removerTemp(destino);
       return res.json({ ok: true, mock: true, uploaded: false });
     }
 
     // MODO REAL: sobe ao Drive (timeout ~5 min). Sucesso grava video_url; falha apenas
     // loga (best-effort). Em todos os casos o arquivo temporario e removido no fim.
     try {
-      const nomeArquivo = nomeVideoDrive(candidato, interviewId, req.file.path);
+      const nomeArquivo = nomeVideoDrive(candidato, interviewId, destino);
       const { link } = await entrevista.comTimeout(
-        drive.enviarVideo({
-          caminho: req.file.path,
-          nomeArquivo,
-          mimeType: req.file.mimetype,
-        }),
+        drive.enviarVideo({ caminho: destino, nomeArquivo, mimeType }),
         VIDEO_UPLOAD_TIMEOUT_MS,
         'Upload Drive',
       );
@@ -1028,7 +1059,7 @@ router.post('/interview/video-upload', (req, res) => {
       );
       return res.json({ ok: true, uploaded: false });
     } finally {
-      removerTemp(req.file.path);
+      removerTemp(destino);
     }
   });
 });

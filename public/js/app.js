@@ -903,17 +903,15 @@ const VM_MIDIA = {
     }
 
     const ext = /mp4/.test(tipo) ? 'mp4' : 'webm';
-    const form = new FormData();
-    form.append('interview_id', interviewId);
+
     // [TEMP-DEBUG] instrumentacao p/ diagnosticar mimetype do video-upload — REMOVER apos diagnostico
     console.log('[DEBUG-video-upload-mimetype]', {
       mediaRecorderMimeType: videoRecorder && videoRecorder.mimeType,
       blobType: blob.type,
-      // append feito COM 3o argumento (filename): form.append('video', blob, `entrevista.${ext}`)
-      appendComFilename: true,
+      envio: 'corpo-cru', // antes: FormData/multipart
+      contentTypeHeader: tipo,
       filename: `entrevista.${ext}`,
     });
-    form.append('video', blob, `entrevista.${ext}`);
 
     // Best-effort: qualquer desfecho (sucesso, erro, timeout ou abort) redireciona
     // uma unica vez para /finalizacao. NUNCA bloqueia/erra para o candidato.
@@ -944,9 +942,10 @@ const VM_MIDIA = {
     xhr.onerror = concluir;
     xhr.ontimeout = concluir;
     xhr.onabort = concluir;
-    xhr.open('POST', '/api/interview/video-upload');
+    xhr.open('POST', `/api/interview/video-upload?interview_id=${encodeURIComponent(interviewId)}`);
+    xhr.setRequestHeader('Content-Type', tipo); // 'video/webm...' no header da requisicao (nao multipart)
     xhr.timeout = 6 * 60 * 1000;
-    xhr.send(form);
+    xhr.send(blob);
   }
 
   function aplicarResposta(dados) {
