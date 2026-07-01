@@ -77,6 +77,16 @@ const uploadVideo = multer({
   }),
   limits: { fileSize: MAX_VIDEO_BYTES },
   fileFilter(req, file, cb) {
+    // [TEMP-DEBUG] instrumentacao p/ diagnosticar 400 "Formato de video invalido." — REMOVER apos diagnostico
+    console.log(
+      '[DEBUG-video-upload-mimetype]',
+      JSON.stringify({
+        fieldname: file.fieldname,
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        reqContentType: req.headers['content-type'],
+      }),
+    );
     if (!/^video\//.test(file.mimetype)) {
       const erro = new Error('Formato de vídeo inválido.');
       erro.code = 'TIPO_INVALIDO';

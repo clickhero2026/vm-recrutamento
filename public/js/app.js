@@ -905,6 +905,14 @@ const VM_MIDIA = {
     const ext = /mp4/.test(tipo) ? 'mp4' : 'webm';
     const form = new FormData();
     form.append('interview_id', interviewId);
+    // [TEMP-DEBUG] instrumentacao p/ diagnosticar mimetype do video-upload — REMOVER apos diagnostico
+    console.log('[DEBUG-video-upload-mimetype]', {
+      mediaRecorderMimeType: videoRecorder && videoRecorder.mimeType,
+      blobType: blob.type,
+      // append feito COM 3o argumento (filename): form.append('video', blob, `entrevista.${ext}`)
+      appendComFilename: true,
+      filename: `entrevista.${ext}`,
+    });
     form.append('video', blob, `entrevista.${ext}`);
 
     // Best-effort: qualquer desfecho (sucesso, erro, timeout ou abort) redireciona
