@@ -74,10 +74,16 @@ function iniciar() {
   console.log(`[db] banco pronto em ${config.caminhoBanco}`);
 
   const app = criarApp();
-  app.listen(config.porta, () => {
+  const servidor = app.listen(config.porta, () => {
     console.log(`[server] no ar em http://localhost:${config.porta} (${config.ambiente})`);
     console.log(`[server] healthcheck: GET /health`);
   });
+
+  // Timeouts ampliados para uploads longos atras de proxy reverso (Traefik/EasyPanel).
+  // keepAliveTimeout default do Node (5s) pode fechar a conexao durante upload de video.
+  servidor.keepAliveTimeout = 120000; // 120s
+  servidor.headersTimeout = 125000; // deve ser > keepAliveTimeout
+  servidor.requestTimeout = 0; // sem limite de duracao total da requisicao (upload pode ser longo)
 }
 
 if (require.main === module) {
