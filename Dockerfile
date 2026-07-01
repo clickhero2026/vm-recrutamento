@@ -28,7 +28,6 @@ EXPOSE 3000
 
 # Volume persistente: o app.db do SQLite vive aqui (montar /data no EasyPanel).
 ENV DATABASE_PATH=/data/app.db
-VOLUME ["/data"]
 
 # Migracoes rodam automaticamente no boot (idempotentes), entao basta subir.
 CMD ["node", "src/server.js"]
