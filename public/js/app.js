@@ -902,17 +902,6 @@ const VM_MIDIA = {
       return;
     }
 
-    const ext = /mp4/.test(tipo) ? 'mp4' : 'webm';
-
-    // [TEMP-DEBUG] instrumentacao p/ diagnosticar mimetype do video-upload — REMOVER apos diagnostico
-    console.log('[DEBUG-video-upload-mimetype]', {
-      mediaRecorderMimeType: videoRecorder && videoRecorder.mimeType,
-      blobType: blob.type,
-      envio: 'corpo-cru', // antes: FormData/multipart
-      contentTypeHeader: tipo,
-      filename: `entrevista.${ext}`,
-    });
-
     // Best-effort: qualquer desfecho (sucesso, erro, timeout ou abort) redireciona
     // uma unica vez para /finalizacao. NUNCA bloqueia/erra para o candidato.
     let concluido = false;

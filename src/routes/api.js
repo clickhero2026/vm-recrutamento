@@ -949,16 +949,6 @@ router.get('/interview/audio-padrao/nao-ouvi.mp3', async (req, res) => {
 router.post('/interview/video-upload', (req, res) => {
   const ct = String(req.headers['content-type'] || '');
 
-  // [TEMP-DEBUG] instrumentacao p/ diagnosticar mimetype do video-upload — REMOVER apos diagnostico
-  console.log(
-    '[DEBUG-video-upload-mimetype]',
-    JSON.stringify({
-      reqContentType: ct,
-      contentLength: req.headers['content-length'],
-      interviewIdQuery: req.query.interview_id,
-    }),
-  );
-
   // 1) Tipo: agora no header da requisicao inteira (nao numa sub-parte multipart).
   if (!/^video\//.test(ct)) {
     req.resume(); // drena o corpo p/ nao pendurar a conexao
