@@ -789,6 +789,7 @@ router.post('/interview/answer', (req, res) => {
       }
 
       let { texto: falaVera, encerrar } = entrevista.extrairEncerrar(resposta.texto);
+      falaVera = entrevista.removerMarkdown(falaVera); // rede de seguranca: nunca deixa markdown vazar p/ TTS/tela
       if (!falaVera) falaVera = 'Pode me contar um pouco mais sobre isso?'; // fallback defensivo
       if (prefixoTransicao) falaVera = `${prefixoTransicao}${falaVera}`;
 

@@ -213,6 +213,7 @@ function montarSystemPrompt({ roteiro, curriculoTexto, agente, maxPerguntas }) {
     `4. Quando ja tiver coberto os blocos OU atingido ${maxPerguntas} perguntas, faca uma fala de encerramento e adicione, na ULTIMA linha, exatamente o marcador ${MARCADOR_ENCERRAR}.`,
     `5. Use o marcador ${MARCADOR_ENCERRAR} APENAS na fala final de encerramento, nunca antes.`,
     '6. Nao invente informacoes do candidato; baseie-se no curriculo e nas respostas.',
+    '7. Responda SEMPRE em texto corrido, como fala natural para ser lida em voz alta. NAO use formatacao markdown: nada de asteriscos (* ou **), sublinhados (_), crases (`), titulos (#), listas com marcadores ou emojis. Escreva apenas frases.',
     '',
     'ROTEIRO DA ENTREVISTA (blocos, na ordem):',
     linhasBlocos || '- (roteiro sem blocos definidos)',
@@ -253,6 +254,35 @@ function montarMensagensLLM({ systemPrompt, turns, recentes }) {
     });
   }
   return mensagens;
+}
+
+// Remove marcadores markdown da fala da Vera antes do TTS e da exibicao. Rede de
+// seguranca independente do system prompt: mesmo que o LLM desobedeca e devolva
+// **negrito**, `codigo`, # titulos etc., o candidato nunca ve nem ouve os simbolos.
+// Preserva o TEXTO, remove so a pontuacao de marcacao.
+function removerMarkdown(texto) {
+  let t = String(texto || '');
+
+  // Blocos/inline de codigo: remove crases, mantem o conteudo.
+  t = t.replace(/```+/g, '').replace(/`([^`]+)`/g, '$1').replace(/`/g, '');
+
+  // Links e imagens: [texto](url) -> texto ; ![alt](url) -> alt
+  t = t.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1');
+
+  // Negrito/italico/sublinhado (1 a 3 marcadores ao redor do conteudo).
+  t = t.replace(/(\*{1,3})(\S(?:.*?\S)?)\1/g, '$2');
+  t = t.replace(/(_{1,3})(\S(?:.*?\S)?)\1/g, '$2');
+
+  // Titulos e citacoes no inicio da linha: remove '#', '>' e marcadores de lista.
+  t = t.replace(/^\s{0,3}#{1,6}\s+/gm, '');
+  t = t.replace(/^\s{0,3}>\s?/gm, '');
+  t = t.replace(/^\s{0,3}(?:[-*+]|\d+\.)\s+/gm, '');
+
+  // Marcadores de enfase residuais (pares nao casados).
+  t = t.replace(/[*_]{1,3}/g, '');
+
+  // Normaliza espacos horizontais.
+  return t.replace(/[ \t]{2,}/g, ' ').trim();
 }
 
 // Separa o marcador de encerramento da fala da Vera.
@@ -379,6 +409,7 @@ module.exports = {
   comTimeout,
   montarSystemPrompt,
   montarMensagensLLM,
+  removerMarkdown,
   extrairEncerrar,
   finalizarEntrevista,
 };
